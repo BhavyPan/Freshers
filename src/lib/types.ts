@@ -256,6 +256,7 @@ export interface StatsResponse {
     checkinRate: number;
     lastCheckinAt: string | null;
     departments: string[];
+    years: string[];
     studentsByDept: { dept: string; total: number; checkedIn: number }[];
     timeline: { bucket: string; count: number }[];
     checkedInLastHour: number;

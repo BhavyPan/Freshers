@@ -134,15 +134,6 @@ export function AdminLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
             </Button>
           </form>
 
-          <details className="mt-5 rounded-lg border border-purple-500/15 bg-purple-500/5 px-3 py-2">
-            <summary className="cursor-pointer select-none text-[11px] uppercase tracking-[0.16em] text-purple-200/50 hover:text-purple-200/80">
-              Demo credentials
-            </summary>
-            <div className="mt-2 space-y-1 font-mono text-[11px] text-purple-200/70">
-              <p>admin / obsidian26 — full organizer</p>
-              <p>volunteer / volunteer26 — entry desk</p>
-            </div>
-          </details>
         </motion.div>
 
         <p className="mt-6 text-center text-[11px] text-purple-200/35">

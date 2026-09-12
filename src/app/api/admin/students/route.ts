@@ -14,6 +14,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const q = url.searchParams.get('q')?.trim() ?? ''
     const status = (url.searchParams.get('status') ?? 'ALL').trim().toUpperCase()
     const dept = url.searchParams.get('dept')?.trim() ?? 'ALL'
+    const branch = url.searchParams.get('branch')?.trim() ?? 'ALL'
     const sort = (url.searchParams.get('sort') ?? 'recent').trim().toLowerCase()
     const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1)
     const pageSize = Math.min(
@@ -28,12 +29,17 @@ export async function GET(req: Request): Promise<NextResponse> {
         { name: { contains: q, mode: 'insensitive' } },
         { mobile: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
+        { department: { contains: q, mode: 'insensitive' } },
+        { year: { contains: q, mode: 'insensitive' } },
       ]
     }
     if (status === 'CHECKED_IN') where.checkedIn = true
     else if (status === 'NOT_ARRIVED') where.checkedIn = false
     if (dept && dept !== 'ALL') {
       where.department = dept === 'Unknown' ? null : dept
+    }
+    if (branch && branch !== 'ALL') {
+      where.year = branch === 'Unknown' ? null : branch
     }
 
     let orderBy: Prisma.StudentOrderByWithRelationInput[]
@@ -92,4 +98,14 @@ export async function GET(req: Request): Promise<NextResponse> {
   } catch {
     return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })
   }
+}
+export async function POST(): Promise<NextResponse> {
+  const guard = await requireAdmin(['ADMIN'])
+  if (!guard.ok) {
+    return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
+  }
+  return NextResponse.json(
+    { ok: false, message: 'Direct student creation is not supported. Use Excel/CSV import.' },
+    { status: 400 }
+  )
 }

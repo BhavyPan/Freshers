@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * `day` is an optional YYYY-MM-DD (server-local); defaults to today.
  */
 export async function GET(req: Request): Promise<NextResponse> {
-  const guard = await requireAdmin(['ADMIN'])
+  const guard = await requireAdmin(['ADMIN', 'VOLUNTEER'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }

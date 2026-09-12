@@ -81,6 +81,7 @@ export const api = {
     q?: string;
     status?: string;
     dept?: string;
+    branch?: string;
     page?: number;
     pageSize?: number;
     sort?: string;
@@ -89,6 +90,7 @@ export const api = {
     if (params.q) sp.set("q", params.q);
     if (params.status && params.status !== "ALL") sp.set("status", params.status);
     if (params.dept && params.dept !== "ALL") sp.set("dept", params.dept);
+    if (params.branch && params.branch !== "ALL") sp.set("branch", params.branch);
     sp.set("page", String(params.page ?? 1));
     sp.set("pageSize", String(params.pageSize ?? 25));
     if (params.sort) sp.set("sort", params.sort);

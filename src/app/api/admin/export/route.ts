@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/auth'
 import { buildAttendancePdf, buildCsv, buildXlsx, formatCheckinTime, type ExportRow } from '@/lib/export'
 
 export async function GET(req: Request): Promise<NextResponse | Response> {
-  const guard = await requireAdmin(['ADMIN'])
+  const guard = await requireAdmin(['ADMIN', 'VOLUNTEER'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }

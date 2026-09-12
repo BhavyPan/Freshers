@@ -42,9 +42,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   const origin = requireSameOrigin(req)
   if (!origin.ok) return failure(origin.message, origin.status)
 
-  const guard = await requireAdmin()
+  const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) return failure(guard.message, guard.status)
-  if (guard.user.role !== 'ADMIN') return failure(IMPORT_PERMISSION_MESSAGE, 403)
 
   try {
     let form: FormData

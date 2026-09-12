@@ -22,9 +22,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     const password = typeof parsed?.password === 'string' ? parsed.password : ''
 
     const ip = getClientIp(req)
+    const isDev = process.env.NODE_ENV !== 'production'
+    const ipMax = isDev ? 200 : 10
+    const accountMax = isDev ? 100 : 5
     const [ipLimit, accountLimit] = await Promise.all([
-      checkRateLimit('login:ip:' + ip, 10, 15 * 60_000),
-      checkRateLimit('login:account:' + (username || 'missing'), 5, 15 * 60_000),
+      checkRateLimit('login:ip:' + ip, ipMax, 15 * 60_000),
+      checkRateLimit('login:account:' + (username || 'missing'), accountMax, 15 * 60_000),
     ])
     if (!ipLimit.allowed || !accountLimit.allowed) {
       const retryAfterMs = Math.max(ipLimit.retryAfterMs, accountLimit.retryAfterMs)
@@ -44,6 +47,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const user = await db.adminUser.findUnique({ where: { username } })
+
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
       await new Promise((resolve) => setTimeout(resolve, 300))
       return NextResponse.json({ ok: false, message: FAILURE_MESSAGE } satisfies LoginResponse, {

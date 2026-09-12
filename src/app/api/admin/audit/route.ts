@@ -24,7 +24,7 @@ const RESULT_ALIASES: Record<string, string[]> = {
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const guard = await requireAdmin(['ADMIN'])
+  const guard = await requireAdmin(['ADMIN', 'VOLUNTEER'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export type AppRoute =
   | { area: "public"; step: "landing" | "verify" | "result" | "kiosk" | "status" }
-  | { area: "admin"; section: "login" | "dashboard" | "registry" | "qr" | "reports" };
+  | { area: "admin"; section: "login" | "dashboard" | "registry" | "qr" | "reports" | "import" | "settings" | "users" };
 
 function parseHash(hash: string): AppRoute {
   const clean = hash.replace(/^#\/?/, "").split("?")[0].replace(/\/$/, "");
@@ -13,12 +13,19 @@ function parseHash(hash: string): AppRoute {
     switch (sub) {
       case "dashboard":
         return { area: "admin", section: "dashboard" };
+      case "students":
       case "registry":
         return { area: "admin", section: "registry" };
       case "qr":
         return { area: "admin", section: "qr" };
       case "reports":
         return { area: "admin", section: "reports" };
+      case "import":
+        return { area: "admin", section: "import" };
+      case "settings":
+        return { area: "admin", section: "settings" };
+      case "users":
+        return { area: "admin", section: "users" };
       default:
         return { area: "admin", section: "login" };
     }

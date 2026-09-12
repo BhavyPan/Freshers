@@ -55,6 +55,7 @@ export function RegistryView() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [status, setStatus] = useState("ALL");
   const [dept, setDept] = useState("ALL");
+  const [branch, setBranch] = useState("ALL");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
 
@@ -81,10 +82,11 @@ export function RegistryView() {
     refetchInterval: 8000,
   });
   const departments = statsQuery.data?.stats.departments ?? [];
+  const branches = statsQuery.data?.stats.years ?? [];
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["students", debouncedQ, status, dept, sort, page],
-    queryFn: () => api.students({ q: debouncedQ, status, dept, sort, page, pageSize: 12 }),
+    queryKey: ["students", debouncedQ, status, dept, branch, sort, page],
+    queryFn: () => api.students({ q: debouncedQ, status, dept, branch, sort, page, pageSize: 12 }),
     placeholderData: keepPreviousData,
     enabled: tab === "students",
   });
@@ -175,9 +177,10 @@ export function RegistryView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tab, data]);
 
-  // Enter-to-check-in lives in its own effect so it always sees fresh state
+  // Enter-to-check-in lives in its own effect so it always sees fresh state (admins only)
   useEffect(() => {
     if (tab !== "students") return;
+    if (!isAdmin) return;
     if (highlighted === null) return;
     function onEnter(e: KeyboardEvent) {
       if (e.key !== "Enter") return;
@@ -262,72 +265,161 @@ export function RegistryView() {
         <ImportWizard onDone={() => setTab("students")} />
       ) : (
         <>
-          {/* quick check-in — entry desk pad */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="obs-card rounded-2xl border-purple-400/25 p-4"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500/30 to-violet-800/30">
-                <Zap className="h-4 w-4 text-purple-300" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-purple-100">Quick check-in</p>
-                <p className="text-[11px] text-purple-200/50">Walk-up juniors with a dead phone — type their ID and hit enter.</p>
+          {/* quick check-in — entry desk pad (admins only) */}
+          {isAdmin && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="obs-card rounded-2xl border-purple-400/25 p-4"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500/30 to-violet-800/30">
+                  <Zap className="h-4 w-4 text-purple-300" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-purple-100">Quick check-in</p>
+                  <p className="text-[11px] text-purple-200/50">Walk-up juniors with a dead phone — type their ID and hit enter.</p>
+                </div>
               </div>
-            </div>
-            <form onSubmit={submitQuick} className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Input
-                value={quickId}
-                onChange={(e) => setQuickId(e.target.value.toUpperCase())}
-                placeholder="e.g. OBS26-041"
-                aria-label="Student ID for quick check-in"
-                autoComplete="off"
-                spellCheck={false}
-                className="h-11 flex-1 rounded-xl border-purple-500/35 bg-[#0b0517]/90 font-mono text-sm font-semibold uppercase tracking-[0.12em] text-purple-50 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-purple-200/25"
-              />
-              <Button
-                type="submit"
-                disabled={!quickId.trim() || quickCheckin.isPending}
-                className="obs-glow-btn h-11 rounded-xl bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 px-6 text-sm font-semibold text-white"
-              >
-                {quickCheckin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgePlus className="mr-2 h-4 w-4" />}
-                Check in
-              </Button>
-            </form>
-            <AnimatePresence>
-              {quickResult && (
-                <motion.div
-                  key={quickResult.message}
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className={cn(
-                    "mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed",
-                    quickOk
-                      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-200"
-                      : quickWarn
-                        ? "border-amber-400/35 bg-amber-500/10 text-amber-200"
-                        : "border-rose-400/35 bg-rose-500/10 text-rose-200"
-                  )}
-                  role="status"
+              <form onSubmit={submitQuick} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={quickId}
+                  onChange={(e) => setQuickId(e.target.value.toUpperCase())}
+                  placeholder="e.g. OBS26-041"
+                  aria-label="Student ID for quick check-in"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-11 flex-1 rounded-xl border-purple-500/35 bg-[#0b0517]/90 font-mono text-sm font-semibold uppercase tracking-[0.12em] text-purple-50 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-purple-200/25"
+                />
+                <Button
+                  type="submit"
+                  disabled={!quickId.trim() || quickCheckin.isPending}
+                  className="obs-glow-btn h-11 rounded-xl bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 px-6 text-sm font-semibold text-white"
                 >
-                  {quickOk ? (
-                    <BadgePlus className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : quickWarn ? (
-                    <BadgeMinus className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : (
-                    <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                  )}
-                  <div>
-                    <p className="font-semibold">{quickResult.student?.name ?? quickResult.result}</p>
-                    <p className="opacity-80">{quickResult.message}</p>
-                  </div>
-                </motion.div>
+                  {quickCheckin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgePlus className="mr-2 h-4 w-4" />}
+                  Check in
+                </Button>
+              </form>
+              <AnimatePresence>
+                {quickResult && (
+                  <motion.div
+                    key={quickResult.message}
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className={cn(
+                      "mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed",
+                      quickOk
+                        ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-200"
+                        : quickWarn
+                          ? "border-amber-400/35 bg-amber-500/10 text-amber-200"
+                          : "border-rose-400/35 bg-rose-500/10 text-rose-200"
+                    )}
+                    role="status"
+                  >
+                    {quickOk ? (
+                      <BadgePlus className="mt-0.5 h-4 w-4 shrink-0" />
+                    ) : quickWarn ? (
+                      <BadgeMinus className="mt-0.5 h-4 w-4 shrink-0" />
+                    ) : (
+                      <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                    )}
+                    <div>
+                      <p className="font-semibold">{quickResult.student?.name ?? quickResult.result}</p>
+                      <p className="opacity-80">{quickResult.message}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
+
+          {/* Quick status pills with live counts */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setStatus("ALL"); setPage(1); }}
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all",
+                status === "ALL"
+                  ? "border-purple-400/50 bg-purple-500/20 text-purple-100 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
+                  : "border-purple-500/20 bg-[#0b0514]/60 text-purple-200/60 hover:border-purple-400/40 hover:text-purple-100"
               )}
-            </AnimatePresence>
-          </motion.div>
+            >
+              <Users className="h-3.5 w-3.5 text-purple-300" />
+              <span>All Students</span>
+              <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] tabular-nums text-purple-200">
+                {statsQuery.data?.stats.totalRegistered ?? "…"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStatus("CHECKED_IN"); setPage(1); }}
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all",
+                status === "CHECKED_IN"
+                  ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-200 shadow-[0_0_12px_rgba(52,211,153,0.25)]"
+                  : "border-purple-500/20 bg-[#0b0514]/60 text-purple-200/60 hover:border-emerald-400/40 hover:text-emerald-200"
+              )}
+            >
+              <BadgeCheck className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Checked In</span>
+              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] tabular-nums text-emerald-300">
+                {statsQuery.data?.stats.checkedIn ?? "…"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStatus("NOT_ARRIVED"); setPage(1); }}
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all",
+                status === "NOT_ARRIVED"
+                  ? "border-amber-400/50 bg-amber-500/20 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
+                  : "border-purple-500/20 bg-[#0b0514]/60 text-purple-200/60 hover:border-amber-400/40 hover:text-amber-200"
+              )}
+            >
+              <Clock className="h-3.5 w-3.5 text-amber-400" />
+              <span>Not Arrived</span>
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] tabular-nums text-amber-300">
+                {statsQuery.data?.stats.notArrived ?? "…"}
+              </span>
+            </button>
+          </div>
+
+          {/* Active view title banner for Not Arrived / Checked In */}
+          {status === "NOT_ARRIVED" && (
+            <div className="flex items-center justify-between rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-300" />
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">
+                  NOT ARRIVED VIEW
+                </span>
+                <span className="text-xs text-purple-200/70">
+                  — registered juniors who have not arrived yet
+                </span>
+              </div>
+              <span className="rounded-full border border-amber-400/40 bg-amber-500/20 px-3 py-1 font-mono text-xs font-bold text-amber-100">
+                {statsQuery.data?.stats.notArrived ?? 0} Students
+              </span>
+            </div>
+          )}
+
+          {status === "CHECKED_IN" && (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <BadgeCheck className="h-4 w-4 text-emerald-300" />
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">
+                  CHECKED-IN VIEW
+                </span>
+                <span className="text-xs text-purple-200/70">
+                  — students currently inside the venue
+                </span>
+              </div>
+              <span className="rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 font-mono text-xs font-bold text-emerald-100">
+                {statsQuery.data?.stats.checkedIn ?? 0} Students
+              </span>
+            </div>
+          )}
 
           {/* filter bar */}
           <div className="obs-card flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center">
@@ -336,22 +428,12 @@ export function RegistryView() {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search ID, name, mobile, email…"
+                placeholder="Search ID, name, department, branch, email…"
                 className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 pl-9 text-sm text-purple-50 placeholder:text-purple-200/25 focus:border-purple-400/70"
               />
               {isFetching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-purple-400/60" />}
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:w-auto sm:flex">
-              <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-                <SelectTrigger className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100 sm:w-[130px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
-                  <SelectItem value="ALL">All statuses</SelectItem>
-                  <SelectItem value="CHECKED_IN">Checked in</SelectItem>
-                  <SelectItem value="NOT_ARRIVED">Not arrived</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-2 sm:w-auto sm:flex">
               <Select value={dept} onValueChange={(v) => { setDept(v); setPage(1); }}>
                 <SelectTrigger className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100 sm:w-[120px]">
                   <SelectValue placeholder="Dept" />
@@ -360,6 +442,17 @@ export function RegistryView() {
                   <SelectItem value="ALL">All depts</SelectItem>
                   {departments.map((d) => (
                     <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={branch} onValueChange={(v) => { setBranch(v); setPage(1); }}>
+                <SelectTrigger className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100 sm:w-[120px]">
+                  <SelectValue placeholder="Branch" />
+                </SelectTrigger>
+                <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
+                  <SelectItem value="ALL">All branches</SelectItem>
+                  {branches.map((branchName) => (
+                    <SelectItem key={branchName} value={branchName}>{branchName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -388,7 +481,7 @@ export function RegistryView() {
                     <th className="px-4 py-3.5">Status</th>
                     <th className="px-4 py-3.5">Check-in</th>
                     <th className="px-4 py-3.5">Tries</th>
-                    <th className="px-4 py-3.5 text-right">Actions</th>
+                    <th className="px-4 py-3.5 text-right">{isAdmin ? "Actions" : "View"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -494,7 +587,7 @@ export function RegistryView() {
                             >
                               <IdCard className="h-3.5 w-3.5" />
                             </Button>
-                            {!s.checkedIn && (
+                            {!s.checkedIn && isAdmin && (
                               <Button
                                 size="icon"
                                 onClick={() => runAction(s.id, "checkin")}
@@ -565,7 +658,11 @@ export function RegistryView() {
                 <span className="ml-3 hidden items-center gap-1.5 text-[10px] text-purple-200/35 lg:inline-flex">
                   <kbd className="obs-kbd">↑</kbd>
                   <kbd className="obs-kbd">↓</kbd> navigate
-                  <kbd className="obs-kbd ml-1.5">↵</kbd> quick check-in
+                  {isAdmin && (
+                    <>
+                      <kbd className="obs-kbd ml-1.5">↵</kbd> quick check-in
+                    </>
+                  )}
                   <kbd className="obs-kbd ml-1.5">esc</kbd> clear
                 </span>
               </p>

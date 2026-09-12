@@ -57,9 +57,19 @@ function AdminArea({ route, navigate }: { route: Extract<AppRoute, { area: "admi
     };
   }, [booted, setAdmin, setAdminBooted]);
 
-  // redirect to default section once logged in and sitting on the bare #/admin route
+  // redirect to default section once logged in, or redirect volunteers away from restricted routes
   useEffect(() => {
-    if (admin && route.section === "login") navigate("#/admin/dashboard");
+    if (!admin) return;
+    if (route.section === "login") {
+      navigate("#/admin/dashboard");
+    } else if (
+      admin.role === "VOLUNTEER" &&
+      (route.section === "import" || route.section === "settings" || route.section === "users")
+    ) {
+      navigate("#/admin/dashboard");
+    } else if (route.section === "import") {
+      navigate("#/admin/registry");
+    }
   }, [admin, route.section, navigate]);
 
   if (!booted) {
@@ -77,7 +87,10 @@ function AdminArea({ route, navigate }: { route: Extract<AppRoute, { area: "admi
     return <AdminLogin onLoggedIn={() => navigate("#/admin/dashboard")} />;
   }
 
-  const section = route.section === "login" ? "dashboard" : route.section;
+  const section: AdminSection =
+    route.section === "registry" || route.section === "qr" || route.section === "reports"
+      ? route.section
+      : "dashboard";
 
   return (
     <AdminShell

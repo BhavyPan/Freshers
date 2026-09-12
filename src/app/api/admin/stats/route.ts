@@ -15,7 +15,7 @@ export async function GET(): Promise<NextResponse> {
   }
   try {
 
-    const [totalRegistered, checkedIn, deniedAttempts, lastCheckinRow, distinctDepts, byDeptTotal, byDeptChecked, grantedLogs, recentRows] =
+    const [totalRegistered, checkedIn, deniedAttempts, lastCheckinRow, distinctDepts, distinctYears, byDeptTotal, byDeptChecked, grantedLogs, recentRows] =
       await Promise.all([
         db.student.count(),
         db.student.count({ where: { checkedIn: true } }),
@@ -29,6 +29,11 @@ export async function GET(): Promise<NextResponse> {
           where: { department: { not: null } },
           distinct: ['department'],
           select: { department: true },
+        }),
+        db.student.findMany({
+          where: { year: { not: null } },
+          distinct: ['year'],
+          select: { year: true },
         }),
         db.student.groupBy({ by: ['department'], _count: { _all: true } }),
         db.student.groupBy({ by: ['department'], where: { checkedIn: true }, _count: { _all: true } }),
@@ -49,6 +54,10 @@ export async function GET(): Promise<NextResponse> {
     const departments = distinctDepts
       .map((row) => row.department)
       .filter((dept): dept is string => dept !== null)
+      .sort()
+    const years = distinctYears
+      .map((row) => row.year)
+      .filter((year): year is string => year !== null)
       .sort()
 
     const deptMap = new Map<string, { dept: string; total: number; checkedIn: number }>()
@@ -118,6 +127,7 @@ export async function GET(): Promise<NextResponse> {
         checkinRate,
         lastCheckinAt: lastCheckinRow?.checkinAt ? lastCheckinRow.checkinAt.toISOString() : null,
         departments,
+        years,
         studentsByDept,
         timeline,
         checkedInLastHour,

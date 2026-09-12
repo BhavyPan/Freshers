@@ -12,6 +12,7 @@ import {
   MonitorPlay,
   QrCode,
   Settings,
+  Shield,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ const NAV: {
   { id: "dashboard", label: "Command Center", icon: LayoutDashboard },
   { id: "registry", label: "Student Registry", icon: Users },
   { id: "qr", label: "Event QR Code", icon: QrCode },
-  { id: "reports", label: "Reports & Audit", icon: ClipboardList, roles: ["ADMIN"] },
+  { id: "reports", label: "Reports & Audit", icon: ClipboardList },
 ];
 
 function useClock() {
@@ -55,16 +56,20 @@ function useClock() {
 }
 
 function RoleBadge({ role }: { role: AdminRole }) {
+  if (role === "VOLUNTEER") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-200"
+        title="Volunteer with strict read-only access"
+      >
+        <Shield className="h-2.5 w-2.5 text-amber-400" />
+        VOLUNTEER · READ ONLY
+      </span>
+    );
+  }
   return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]",
-        role === "ADMIN"
-          ? "border border-purple-400/40 bg-purple-500/25 text-purple-200"
-          : "border border-emerald-400/30 bg-emerald-500/15 text-emerald-300"
-      )}
-    >
-      {role}
+    <span className="rounded-full border border-purple-400/40 bg-purple-500/25 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-purple-200">
+      ADMIN
     </span>
   );
 }
@@ -344,7 +349,15 @@ export function AdminShell({
     <div className="obs-grid-bg flex min-h-svh flex-col">
       {/* mobile top bar */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-purple-500/15 bg-[#06030c]/85 px-4 py-3 backdrop-blur-lg md:hidden">
-        <ObsidianLogo size="sm" />
+        <div className="flex items-center gap-2.5">
+          <ObsidianLogo size="sm" />
+          {admin?.role === "VOLUNTEER" && (
+            <span className="flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-amber-200">
+              <Shield className="h-2.5 w-2.5 text-amber-400" />
+              READ ONLY
+            </span>
+          )}
+        </div>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
             <Button variant="outline" size="icon" className="h-9 w-9 border-purple-500/30 text-purple-200" aria-label="Open menu">
@@ -382,6 +395,12 @@ export function AdminShell({
               <p className="mt-0.5 text-xs text-purple-200/50">OBSIDIAN &apos;26 · Freshers 2K26 · Unfold the Unknown</p>
             </div>
             <div className="flex items-center gap-4">
+              {admin?.role === "VOLUNTEER" && (
+                <span className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.15)]">
+                  <Shield className="h-3 w-3 text-amber-400" />
+                  VOLUNTEER · READ ONLY
+                </span>
+              )}
               <span className="flex items-center gap-2 rounded-full border border-purple-500/30 bg-purple-500/8 px-3 py-1">
                 <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-purple-400" />
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200/80">Live</span>
@@ -401,12 +420,18 @@ export function AdminShell({
                   Live {now ? now.toLocaleTimeString("en-IN", { hour12: false }) : ""}
                 </p>
               </div>
+              {admin?.role === "VOLUNTEER" && (
+                <span className="flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-amber-200">
+                  <Shield className="h-2.5 w-2.5 text-amber-400" />
+                  READ ONLY
+                </span>
+              )}
             </div>
             {children}
           </main>
 
           <footer className="mt-auto border-t border-purple-500/15 bg-[#06030c]/70 px-6 py-3.5 text-center text-[10px] uppercase tracking-[0.22em] text-purple-200/35">
-            OBSIDIAN &apos;26 · Smart QR Entry System {admin && <>· {admin.role === "ADMIN" ? "Organizer" : "Entry Desk"}</>}
+            OBSIDIAN &apos;26 · Smart QR Entry System {admin && <>· {admin.role === "ADMIN" ? "Organizer" : "Volunteer (Read Only)"}</>}
           </footer>
         </div>
       </div>

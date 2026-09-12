@@ -8,12 +8,12 @@ import { requireSameOrigin } from '@/lib/security'
 
 /**
  * Manual check-in from the entry desk — for juniors whose phone died / no QR.
- * Volunteers + admins allowed. Uses the same duplicate-protection as self check-in.
+ * Admins only. Volunteers have strict read-only access.
  */
 export async function POST(req: Request): Promise<NextResponse> {
   const origin = requireSameOrigin(req)
   if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
-  const guard = await requireAdmin()
+  const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }

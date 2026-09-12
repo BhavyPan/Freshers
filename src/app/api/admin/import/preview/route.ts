@@ -11,12 +11,9 @@ const DB_LOOKUP_CHUNK = 500
 export async function POST(req: Request): Promise<NextResponse> {
   const origin = requireSameOrigin(req)
   if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
-  const guard = await requireAdmin()
+  const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
-  }
-  if (guard.user.role !== 'ADMIN') {
-    return NextResponse.json({ ok: false, message: IMPORT_PERMISSION_MESSAGE }, { status: 403 })
   }
   try {
     let form: FormData

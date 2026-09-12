@@ -349,22 +349,24 @@ export function StudentProfileDrawer({
               {/* ---- actions ---- */}
               <div className="shrink-0 border-b border-purple-500/15 px-6 py-5">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200/45">
-                  Desk actions
+                  {isAdmin ? "Desk actions" : "Event invite & pass"}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {!student.checkedIn ? (
-                    <Button
-                      onClick={() => void runAction("checkin")}
-                      disabled={actionBusy !== null}
-                      className="obs-glow-btn h-10 rounded-xl bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-600 px-4 text-sm font-semibold text-white"
-                    >
-                      {actionBusy === "checkin" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Play className="mr-2 h-4 w-4" />
-                      )}
-                      Check in now
-                    </Button>
+                    isAdmin && (
+                      <Button
+                        onClick={() => void runAction("checkin")}
+                        disabled={actionBusy !== null}
+                        className="obs-glow-btn h-10 rounded-xl bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-600 px-4 text-sm font-semibold text-white"
+                      >
+                        {actionBusy === "checkin" ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="mr-2 h-4 w-4" />
+                        )}
+                        Check in now
+                      </Button>
+                    )
                   ) : (
                     isAdmin && (
                       <Button

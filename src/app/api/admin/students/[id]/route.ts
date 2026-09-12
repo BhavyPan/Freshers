@@ -80,7 +80,7 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
 export async function PATCH(req: Request, context: RouteContext): Promise<NextResponse> {
   const origin = requireSameOrigin(req)
   if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
-  const guard = await requireAdmin()
+  const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
