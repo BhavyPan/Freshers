@@ -1,0 +1,19 @@
+{
+  "name": "OBSIDIAN '26 — Smart QR Entry",
+  "short_name": "OBSIDIAN '26",
+  "description": "Smart QR Entry & Access Management System for OBSIDIAN '26 Freshers 2K26. Scan, verify, unfold the unknown.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070410",
+  "theme_color": "#0a0614",
+  "categories": ["events", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/obsidian-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

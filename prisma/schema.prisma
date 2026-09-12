@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Registered students imported from Excel/CSV (the verification database)
+model Student {
+  id         String    @id @default(cuid())
+  studentId  String    @unique // normalized unique key (trimmed + upper-cased)
+  name       String
+  mobile     String?
+  department String?
+  email      String?
+  year       String?
+  extraData  String? // JSON string of any additional imported columns
+  checkedIn  Boolean   @default(false)
+  checkinAt  DateTime?
+  checkinBy  String? // SELF (QR scan) or admin username for corrections
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([checkedIn])
+  @@index([department])
+}
+
+// Admin / volunteer accounts for the organizer team
+model AdminUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String?
+  role         String   @default("ADMIN") // ADMIN | VOLUNTEER
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Server-side sessions (token stored in httpOnly cookie)
+model AdminSession {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Every verification attempt (audit trail)
+model AuditLog {
+  id         String   @id @default(cuid())
+  rawInput   String // exactly what the visitor typed
+  lookupId   String // normalized id that was searched
+  result     String // GRANTED | ALREADY_CHECKED_IN | DENIED | RATE_LIMITED
+  studentId  String? // link to student row when found
+  studentKey String? // denormalized studentId key
+  ipHash     String? // hashed IP for abuse tracking (no raw IP stored)
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([result])
+  @@index([createdAt])
+}
+
+// Event settings + QR token (single row)
+model EventSettings {
+  id          String   @id @default(cuid())
+  eventToken  String   @unique @default(cuid()) // rotating token embedded in QR URL
+  eventName   String   @default("OBSIDIAN '26")
+  tagline     String   @default("Unfold the Unknown")
+  status      String   @default("OPEN") // OPEN | PAUSED | CLOSED — entry gate control
+  updatedAt   DateTime @updatedAt
+}
