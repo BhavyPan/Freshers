@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(): Promise<NextResponse> {
   try {
     await ensureSeeded()
-    const [settings, checkedIn, totalRegistered, recent] = await Promise.all([
+    const [settings, checkedIn, totalRegistered, recent, lastHour] = await Promise.all([
       getEventSettings(),
       db.student.count({ where: { checkedIn: true } }),
       db.student.count(),
@@ -22,6 +22,9 @@ export async function GET(): Promise<NextResponse> {
         orderBy: { checkinAt: 'desc' },
         take: 8,
         select: { id: true, name: true, department: true, checkinAt: true },
+      }),
+      db.student.count({
+        where: { checkedIn: true, checkinAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
       }),
     ])
 
@@ -39,6 +42,7 @@ export async function GET(): Promise<NextResponse> {
         : null,
       checkedIn,
       totalRegistered,
+      checkedInLastHour: lastHour,
       recent: recent.map((s) => {
         const parts = s.name.trim().split(/\s+/)
         const firstName = parts[0] ?? s.name

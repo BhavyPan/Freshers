@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BadgeCheck, Clock, Compass, HelpCircle, House, Info, PauseCircle, RotateCcw, ShieldAlert, Volume2, VolumeX, XOctagon } from "lucide-react";
+import { BadgeCheck, Clock, Compass, HelpCircle, House, Info, Loader2, PauseCircle, Printer, RotateCcw, ShieldAlert, Volume2, VolumeX, XOctagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { isSoundEnabled, playFeedback, setSoundEnabled } from "@/lib/feedback";
 import { useObsidianStore } from "@/lib/client-store";
+import { printEntryReceipt } from "@/lib/receipt";
+import { useToast } from "@/hooks/use-toast";
 import { SparkleBurst } from "./SparkleBurst";
 
 function formatTime(iso?: string | null) {
@@ -23,6 +25,8 @@ export function ResultView({ onVerifyAnother, onDone }: { onVerifyAnother: () =>
   const lastInput = useObsidianStore((s) => s.lastInput);
   // null = not yet read on client (server renders the enabled icon)
   const [soundOn, setSoundOnState] = useState<boolean | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState(false);
+  const { toast } = useToast();
   const soundEnabled = soundOn ?? true;
 
   useEffect(() => {
@@ -38,6 +42,35 @@ export function ResultView({ onVerifyAnother, onDone }: { onVerifyAnother: () =>
     setSoundEnabled(next);
     setSoundOnState(next);
     if (next) playFeedback("tap");
+  }
+
+  async function printReceipt() {
+    if (!response?.student || receiptBusy) return;
+    setReceiptBusy(true);
+    playFeedback("tap");
+    try {
+      await printEntryReceipt({
+        studentId: response.student.studentId,
+        name: response.student.name,
+        department: response.student.department,
+        year: response.student.year,
+        checkinAt: response.checkinAt,
+        status: response.result === "ALREADY_CHECKED_IN" ? "ALREADY_CHECKED_IN" : "GRANTED",
+        source: "verify",
+      });
+      toast({
+        title: "Receipt sent to the printer",
+        description: `${response.student.name} · proof-of-entry slip with re-verify QR.`,
+      });
+    } catch {
+      toast({
+        title: "Could not open the print dialog",
+        description: "This device may block print pop-ups from the kiosk tab.",
+        variant: "destructive",
+      });
+    } finally {
+      setReceiptBusy(false);
+    }
   }
 
   if (!response) {
@@ -192,8 +225,27 @@ export function ResultView({ onVerifyAnother, onDone }: { onVerifyAnother: () =>
           </p>
         )}
 
+        {/* receipt — physical proof of entry */}
+        {(granted || already) && response.student && (
+          <button
+            onClick={() => void printReceipt()}
+            disabled={receiptBusy}
+            className="group mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-purple-400/40 bg-purple-500/[0.06] px-4 py-2.5 text-xs font-semibold text-purple-200/85 transition-all hover:border-purple-300/70 hover:bg-purple-500/15 hover:text-purple-100 hover:shadow-[0_0_20px_rgba(168,85,247,0.18)] disabled:opacity-50"
+          >
+            {receiptBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-300" />
+            ) : (
+              <Printer className="h-3.5 w-3.5 text-purple-300 transition-transform group-hover:-rotate-12" />
+            )}
+            {receiptBusy ? "Preparing receipt…" : "Print entry receipt"}
+            <span className="ml-1 hidden text-[9px] font-normal uppercase tracking-[0.18em] text-purple-200/40 sm:inline">
+              proof of entry
+            </span>
+          </button>
+        )}
+
         {/* actions */}
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Button
             onClick={onVerifyAnother}
             className={`h-12 flex-1 rounded-xl font-semibold transition-all ${

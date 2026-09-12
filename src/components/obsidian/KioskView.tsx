@@ -19,9 +19,11 @@ import {
   BadgeMinus,
   Expand,
   Hourglass,
+  Loader2,
   Maximize2,
   Minimize2,
   MonitorPlay,
+  Printer,
   ScanLine,
   ShieldX,
   Timer,
@@ -31,6 +33,7 @@ import {
 import { api } from "@/lib/api-client";
 import { isSoundEnabled, playFeedback, primeAudio, setSoundEnabled } from "@/lib/feedback";
 import { readEventToken } from "@/lib/client-store";
+import { printEntryReceipt } from "@/lib/receipt";
 import type { VerifyResponse } from "@/lib/types";
 import { AnnouncementBanner } from "./AnnouncementBanner";
 import { EventStatusBadge } from "./EventStatusBadge";
@@ -131,6 +134,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
   const [activity, setActivity] = useState<Outcome[]>([]);
   const [idleSecs, setIdleSecs] = useState(0);
   const [hintIdx, setHintIdx] = useState(0);
+  const [printing, setPrinting] = useState(false);
 
   const { data: pulse } = useQuery({
     queryKey: ["pulse"],
@@ -297,6 +301,34 @@ export function KioskView({ onExit }: { onExit: () => void }) {
   function cycleReset() {
     const idx = RESET_OPTIONS.indexOf(resetSecs as (typeof RESET_OPTIONS)[number]);
     persistReset(RESET_OPTIONS[(idx + 1) % RESET_OPTIONS.length]);
+  }
+
+  // print a proof-of-entry receipt for the current outcome; pauses the
+  // auto-reset countdown so the print dialog doesn't race the reset
+  async function printReceipt() {
+    const student = outcome?.resp.student;
+    if (!student || printing) return;
+    setPrinting(true);
+    const prevCountdown = countdown;
+    setCountdown(null);
+    playFeedback("tap");
+    try {
+      await printEntryReceipt({
+        studentId: student.studentId,
+        name: student.name,
+        department: student.department,
+        year: student.year,
+        checkinAt: outcome?.resp.checkinAt ?? outcome?.at.toISOString() ?? null,
+        status: outcome?.resp.result === "ALREADY_CHECKED_IN" ? "ALREADY_CHECKED_IN" : "GRANTED",
+        source: "kiosk",
+      });
+    } catch {
+      /* print unavailable at this desk — kiosk keeps flowing */
+    } finally {
+      setPrinting(false);
+      if (prevCountdown !== null && resetSecs > 0) setCountdown(resetSecs);
+      refocus();
+    }
   }
 
   const theme = outcome ? outcomeTheme(outcome.resp) : null;
@@ -478,6 +510,25 @@ export function KioskView({ onExit }: { onExit: () => void }) {
                   )}
                 </span>
               </button>
+
+              {/* proof-of-entry receipt — only for admitted juniors */}
+              {outcome?.resp.student && (outcome.resp.result === "GRANTED" || outcome.resp.result === "ALREADY_CHECKED_IN") && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void printReceipt();
+                  }}
+                  disabled={printing}
+                  className="flex items-center gap-2 rounded-full border border-dashed border-emerald-400/30 bg-emerald-500/[0.07] px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200/80 transition-all hover:border-emerald-300/60 hover:bg-emerald-500/15 hover:text-emerald-100 disabled:opacity-50"
+                >
+                  {printing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Printer className="h-3 w-3" />
+                  )}
+                  {printing ? "printing…" : "print receipt"}
+                </button>
+              )}
             </motion.div>
           ) : (
             <motion.div

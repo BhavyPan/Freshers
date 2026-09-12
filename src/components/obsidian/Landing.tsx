@@ -3,7 +3,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, MonitorPlay, ScanLine, ShieldCheck, Users, Zap } from "lucide-react";
+import { ChevronRight, Flame, MonitorPlay, ScanLine, ShieldCheck, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { ObsidianLogo } from "./ObsidianLogo";
@@ -110,22 +110,40 @@ export function Landing({ onBegin }: { onBegin: () => void }) {
         {counts && (
           <motion.div
             variants={item}
-            className="mt-6 flex items-center gap-3 rounded-2xl border border-purple-500/25 bg-[#0b0517]/70 px-5 py-3 backdrop-blur-md"
+            className="mt-6 flex flex-wrap items-center justify-center gap-2.5"
             aria-live="polite"
           >
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15">
-              <Users className="h-4.5 w-4.5 text-emerald-300" />
-              <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+            <span className="flex items-center gap-3 rounded-2xl border border-purple-500/25 bg-[#0b0517]/70 px-5 py-3 backdrop-blur-md">
+              <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15">
+                <Users className="h-4.5 w-4.5 text-emerald-300" />
+                <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+              </span>
+              <span className="text-left">
+                <span className="font-display block text-lg font-black leading-none tabular-nums text-purple-50">
+                  {counts.checkedIn}
+                  <span className="text-xs font-semibold text-purple-300/60"> / {counts.total}</span>
+                </span>
+                <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.22em] text-purple-200/50">
+                  juniors inside right now
+                </span>
+              </span>
             </span>
-            <div className="text-left">
-              <p className="font-display text-lg font-black leading-none tabular-nums text-purple-50">
-                {counts.checkedIn}
-                <span className="text-xs font-semibold text-purple-300/60"> / {counts.total}</span>
-              </p>
-              <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-purple-200/50">
-                juniors inside right now
-              </p>
-            </div>
+            {pulse && pulse.checkedInLastHour > 0 && (
+              <span
+                className="flex items-center gap-2 rounded-2xl border border-amber-400/30 bg-[#170e04]/70 px-4 py-3 backdrop-blur-md shadow-[0_0_22px_rgba(251,146,60,0.12)]"
+                title="Juniors who walked in during the last 60 minutes"
+              >
+                <Flame className="h-4.5 w-4.5 text-amber-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.65)]" />
+                <span className="text-left">
+                  <span className="font-display block text-lg font-black leading-none tabular-nums text-amber-200">
+                    +{pulse.checkedInLastHour}
+                  </span>
+                  <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.22em] text-amber-200/55">
+                    in the last hour
+                  </span>
+                </span>
+              </span>
+            )}
           </motion.div>
         )}
 

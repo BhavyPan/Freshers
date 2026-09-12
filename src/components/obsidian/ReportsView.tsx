@@ -29,7 +29,45 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, exportUrl, passSheetsUrl } from "@/lib/api-client";
+import type { ActivityResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** Client-side CSV of the current operator standings — instant, no server round-trip. */
+function downloadLeaderboardCsv(board: ActivityResponse["leaderboard"]) {
+  const cell = (v: string | number | null) => {
+    const s = String(v ?? "");
+    return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const rows: string[] = [
+    ["Rank", "Operator", "Username", "Role", "Entries Attributed", "Recent Grants (24h)", "Score", "Last Activity"].map(cell).join(","),
+    ...board.map((op, i) =>
+      [
+        i + 1,
+        op.displayName || op.actor,
+        op.actor,
+        (op.role ?? "staff").toLowerCase(),
+        op.entries,
+        op.grants24h,
+        op.entries + op.grants24h,
+        op.lastAt ? format(new Date(op.lastAt), "dd MMM yyyy HH:mm:ss") : "",
+      ]
+        .map(cell)
+        .join(",")
+    ),
+    "",
+    ["Generated", format(new Date(), "dd MMM yyyy HH:mm:ss")].map(cell).join(","),
+    ["Event", "OBSIDIAN '26 — Freshers 2K26"].map(cell).join(","),
+  ];
+  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `obsidian26-desk-leaderboard-${format(new Date(), "yyyy-MM-dd")}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
 
 const SCOPES = [
   {
@@ -222,6 +260,16 @@ export function ReportsView() {
         <div className="mb-4 flex flex-wrap items-center gap-2.5">
           <Trophy className="h-4 w-4 text-amber-300" />
           <p className="text-sm font-semibold text-purple-100">Desk Leaderboard — operator standings</p>
+          {!activityQuery.isLoading && (activityQuery.data?.leaderboard.length ?? 0) > 0 && (
+            <button
+              onClick={() => downloadLeaderboardCsv(activityQuery.data!.leaderboard)}
+              title="Download the standings as CSV"
+              className="flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200 transition-all hover:border-amber-300/60 hover:bg-amber-500/20 hover:shadow-[0_0_14px_rgba(251,191,36,0.2)]"
+            >
+              <Download className="h-3 w-3" />
+              csv
+            </button>
+          )}
           <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-purple-200/50">
             <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-amber-400" /> live · all event
           </span>

@@ -142,6 +142,8 @@ export interface PublicPulseResponse {
   announcementExpiresAt: string | null;
   checkedIn: number;
   totalRegistered: number;
+  /** Students currently inside who arrived within the last hour. */
+  checkedInLastHour: number;
   recent: { id: string; firstName: string; lastInitial: string; department: string | null; at: string }[];
 }
 

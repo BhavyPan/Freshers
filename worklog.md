@@ -275,3 +275,34 @@ Stage Summary:
 - Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
 - Risks: lookup loads all students w/ mobile for digit-normalized matching — fine at event scale (hundreds); would want a normalized mobile column if imports grow to 10k+. Old audit rows actor=null render as SELF (accurate pre-feature).
 - Next-round ideas: per-student printable receipt after check-in (browser print), WhatsApp share of pass PNG via canvas blob (finish mobile deep-links), volunteer leaderboard export, scheduled audit digest email, "who's inside" public wait-time estimate on landing.
+
+---
+Task ID: 10 (cron webDevReview round 8)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + printable entry receipts (verify + kiosk) + leaderboard CSV export + landing "last hour" pace stat
+
+Work Log:
+QA & status:
+- Reviewed worklog (round 7 complete, stable) + dev.log (all 200s) → full browser QA (agent-browser, desktop 1280 + mobile 390): landing (3D crystal, banner, 25/83 counter, ticker), verify, kiosk, all 4 admin sections — zero console errors → system stable → chose feature development.
+
+New features:
+1. PRINTABLE ENTRY RECEIPT (flagship): new src/lib/receipt.ts — printEntryReceipt() renders a light-themed, print-grade proof-of-entry ticket into a hidden iframe (srcdoc + onload print, 15s orphan-frame safety net). Ticket: purple gradient header (event name + tagline + deterministic receipt no. R-XXXXXXX hashed from studentId+entry time), ADMIRED/ALREADY INSIDE stamp (emerald/amber), name + mono ID, dept/year/entry-time/entry-method grid, perforated tear line (notch circles), re-verify QR (invite URL), KEEP THIS SLIP guidance, issued-at footer; @page 10mm margins + print-color-adjust exact. Wired into TWO surfaces: ResultView gets a dashed "Print entry receipt · PROOF OF ENTRY" button (GRANTED/ALREADY, busy state, printer icon rotates on hover, toast on success/failure) and KioskView gets an emerald "PRINT RECEIPT" pill under the auto-reset countdown (pauses + restarts the countdown around the print dialog so it can't race the reset). Verified: capture-hooked iframe srcdoc → rendered receipt screenshot is pixel-correct; click exercised on both surfaces with zero console errors.
+2. LEADERBOARD CSV EXPORT: ReportsView Desk Leaderboard header gains an amber "CSV" chip (only when rows exist) — client-side blob download (rank, operator, username, role, entries, 24h grants, score, last activity + generated/event footer lines, proper quote-escaping), filename obsidian26-desk-leaderboard-YYYY-MM-DD.csv. Content shape verified against live activity data (admin 12 / volunteer 2).
+3. LANDING PACE STAT: /api/public/pulse now computes checkedInLastHour (students inside with checkinAt ≥ now−1h); Landing counter row becomes a wrap-friendly chip group — emerald 25/83 card + amber "+N IN THE LAST HOUR" flame card (glow shadow, tooltip, hidden when 0). Verified live: showed +2 during QA, correctly dropped to +1 after the QA reverts.
+
+Styling details:
+- Receipt ticket is fully print-designed (light theme, tear perforation with side notches, stamp ring, gradient band survives print via print-color-adjust).
+- ResultView receipt button: dashed purple border + hover glow + rotating printer icon; kiosk pill: emerald dashed + uppercase tracking.
+- Leaderboard CSV chip: amber glass with hover glow, consistent with card accent.
+- Landing pace chip: amber glass + flame drop-shadow, wraps under the counter on 390px (verified no overflow).
+
+Verification:
+- bun run lint PASS · all 7 routes console-error-free · dev.log 285 recent 200s, zero unexpected non-200s.
+- Round-trips: verify 2K26IT007 → GRANTED + receipt button exercised → audit-logged uncheckin revert; kiosk 2K26ECE010 → GRANTED + print receipt clicked → revert. Pulse lastHour recomputed correctly after both reverts.
+- Data integrity: 83 registered / 25 in / gate OPEN / demo announcement still LIVE; 2 new audit rows (UNCHECKED with QA reasons) are legitimate operational records.
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 26 major features (…previous 23 + printable entry receipts on verify & kiosk, leaderboard CSV export, landing last-hour pace stat).
+- Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
+- Risks: none known. Receipt relies on iframe print (supported everywhere modern); headless QA confirms pipeline + cleanup, physical print dialog untestable in sandbox.
+- Next-round ideas: per-dept doorway QR posters (print pack), student-facing "my entry" status mini-page from receipt QR, audit digest export scheduling, wristband-style horizontal receipt variant, kiosk receipt auto-print toggle for thermal printers.
