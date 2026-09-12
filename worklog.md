@@ -306,3 +306,33 @@ Stage Summary:
 - Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
 - Risks: none known. Receipt relies on iframe print (supported everywhere modern); headless QA confirms pipeline + cleanup, physical print dialog untestable in sandbox.
 - Next-round ideas: per-dept doorway QR posters (print pack), student-facing "my entry" status mini-page from receipt QR, audit digest export scheduling, wristband-style horizontal receipt variant, kiosk receipt auto-print toggle for thermal printers.
+
+---
+Task ID: 11 (cron webDevReview round 9)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + per-dept door posters PDF + kiosk auto-print receipts + gate-pace projection
+
+Work Log:
+QA & status:
+- Reviewed worklog (round 8 complete, 26 features) + dev.log (healthy) → full browser QA: all 7 routes, zero console errors; pulse 25/83, gate OPEN → stable → feature development. Confirmed announcement quick-templates already existed (round 4) before re-proposing.
+
+New features:
+1. DEPT DOOR POSTERS (flagship): new GET /api/admin/export/posters?dept=CSE|ALL — pdf-lib A4 poster per department: deep-purple header band (event name + tagline), "DEPARTMENT DOOR" kicker, giant auto-shrunk dept name with violet underline, squad line, token-stamped venue QR in a corner-ticked frame (reuses qrPngBuffer — survives token rotation), "SCAN TO CHECK IN" + kiosk hint, live "N/M ALREADY INSIDE" chip, generated-at footer. ReportsView gains a violet "Door Posters — department signage" card (dept Select sourced from stats.departments + Download PDF). Fixed a QA-caught overlap (headcount chip collided with scan line) → re-rendered PDF to pixel-verify: 7 pages (AIML…CSE) all clean. Verified: 200 w/ valid PDF (all-depts 44 KB / single-dept 38 KB), 401 unauth, page count 7 via pymupdf.
+2. KIOSK AUTO-PRINT RECEIPTS: new persisted toggle (obsidian.kiosk.autoprint) + top-bar pill (muted "receipts" ↔ glowing emerald "auto-print", aria-pressed). On GRANTED with autoPrint ON the receipt fires automatically: printReceipt refactored to accept the fresh resp (no state race) + {freshCountdown} so the auto-reset countdown starts AFTER the print dialog closes instead of racing it. Receipt pill relabels to "print again" when auto mode is on (QA-fixed ambiguous "receipt printing" wording). Verified end-to-end: toggle ON → localStorage 1 → scan 2K26CSE002 → GRANTED + auto print + countdown restored (screenshot) → toggled OFF (localStorage 0) → audit-logged revert.
+3. GATE-PACE PROJECTION: dashboard Venue Fill Rate card gains a pace line computed from the 6 h timeline's last two 15-min buckets: flow → emerald Zap chip "At this pace (+N in 30 min) — full house around h:mm a" (ETA = notArrived ÷ rate); zero recent entries → muted "No entries in the last 30 min — N still pending"; complete → nothing (goals card owns the celebration). Live-verified: "+2 in 30 min → full house around 2:45 AM" matches hand math (58 pending ÷ 2/30min = 870 min).
+
+Styling details:
+- Poster: double frame (purple outer + soft inner), corner-ticked QR frame, headcount pill — all print-grade pdf-lib vector work.
+- Kiosk auto-print pill: emerald glow + shadow when live; hidden on <sm to protect the mobile top bar.
+- Pace chip: emerald glass + Zap drop-shadow + hover glow; stalled chip stays muted purple so alarm ≠ noise.
+- Door posters card: violet accent + DoorOpen icon, consistent with Pass Sheets row.
+
+Verification:
+- bun run lint PASS · all 7 routes console-error-free · dev.log 478 recent 200s (only non-200 = my intentional unauth 401 probe).
+- Data integrity: QA check-in (2K26CSE002) reverted w/ audit reason; auto-print restored OFF; 83 registered / 25 in / gate OPEN / demo announcement LIVE.
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 29 major features (…previous 26 + dept door posters PDF, kiosk auto-print receipts, gate-pace full-house projection).
+- Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
+- Risks: none known. Poster headcount is generated-at-print time (static once printed) — by design for print; pace ETA assumes steady rate from a 30-min window (labeled "at this pace" so it reads as an estimate).
+- Next-round ideas: horizontal wristband receipt variant, per-dept fill-rate goal posters merge, student "my entry" status mini-page, announcement templates per gate status transition, scheduled audit CSV digest (cron-less, lazy on first admin load of the day).

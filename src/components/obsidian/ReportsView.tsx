@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  DoorOpen,
   Download,
   FileDown,
   FileSpreadsheet,
@@ -28,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, exportUrl, passSheetsUrl } from "@/lib/api-client";
+import { api, exportUrl, passSheetsUrl, postersUrl } from "@/lib/api-client";
 import type { ActivityResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +132,7 @@ export function ReportsView() {
   const [result, setResult] = useState("ALL");
   const [page, setPage] = useState(1);
   const [passScope, setPassScope] = useState<PassScope>("notarrived");
+  const [posterDept, setPosterDept] = useState("ALL");
 
   useMemo(() => {
     const t = setTimeout(() => {
@@ -240,6 +242,52 @@ export function ReportsView() {
             </Select>
             <a
               href={passSheetsUrl(passScope)}
+              download
+              className="obs-glow-btn flex h-9 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 px-4 text-xs font-bold text-white"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Download PDF
+            </a>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* door posters — per-dept venue signage */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.23 }}
+        className="obs-card obs-card-hover rounded-2xl border border-violet-400/20 p-5"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-400/30 bg-violet-500/10 text-violet-300">
+            <DoorOpen className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-purple-50">Door Posters — department signage</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-purple-200/50">
+              One A4 poster per department door: giant squad name, the official entry QR and a live
+              headcount. Print the pack, stick each page where its squad lines up.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <Select value={posterDept} onValueChange={setPosterDept}>
+              <SelectTrigger className="h-9 w-44 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100">
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
+                <SelectItem value="ALL" className="text-xs">
+                  All departments (pack)
+                </SelectItem>
+                {(stats?.departments ?? []).map((d) => (
+                  <SelectItem key={d} value={d} className="text-xs">
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <a
+              href={postersUrl(posterDept)}
               download
               className="obs-glow-btn flex h-9 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 px-4 text-xs font-bold text-white"
             >

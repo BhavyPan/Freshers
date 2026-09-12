@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39}$/;
 const RESET_KEY = "obsidian.kiosk.autoreset";
+const AUTOPRINT_KEY = "obsidian.kiosk.autoprint";
 const RESET_OPTIONS = [3, 5, 8, 0] as const; // seconds, 0 = manual
 const ATTRACT_AFTER = 60; // seconds idle before the attract loop kicks in
 
@@ -135,6 +136,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
   const [idleSecs, setIdleSecs] = useState(0);
   const [hintIdx, setHintIdx] = useState(0);
   const [printing, setPrinting] = useState(false);
+  const [autoPrint, setAutoPrint] = useState(false);
 
   const { data: pulse } = useQuery({
     queryKey: ["pulse"],
@@ -150,6 +152,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
     setResetSecs(
       RESET_OPTIONS.includes(n as (typeof RESET_OPTIONS)[number]) ? (n as number) : 5
     );
+    setAutoPrint(window.localStorage.getItem(AUTOPRINT_KEY) === "1");
     setSoundOn(isSoundEnabled());
     const tick = () => setClock(new Date());
     tick();
@@ -219,6 +222,17 @@ export function KioskView({ onExit }: { onExit: () => void }) {
     }
   }
 
+  function toggleAutoPrint() {
+    const next = !autoPrint;
+    setAutoPrint(next);
+    try {
+      window.localStorage.setItem(AUTOPRINT_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    playFeedback("tap");
+  }
+
   const reset = useCallback(
     (opts?: { keepValue?: boolean }) => {
       setOutcome(null);
@@ -245,7 +259,13 @@ export function KioskView({ onExit }: { onExit: () => void }) {
       setOutcome(entry);
       setActivity((a) => [entry, ...a].slice(0, 7));
       playFeedback(outcomeSound(resp));
-      if (resetSecs > 0) setCountdown(resetSecs);
+      if (resp.result === "GRANTED" && resp.student && autoPrint) {
+        // thermal-printer flow: fire the receipt automatically; the countdown
+        // starts fresh once the print dialog is dismissed
+        void printReceipt(resp, { freshCountdown: true });
+      } else if (resetSecs > 0) {
+        setCountdown(resetSecs);
+      }
     } catch {
       // network/rate-limit — show a denial-style flash, auto-reset stays manual-ish
       setOutcome({
@@ -303,10 +323,11 @@ export function KioskView({ onExit }: { onExit: () => void }) {
     persistReset(RESET_OPTIONS[(idx + 1) % RESET_OPTIONS.length]);
   }
 
-  // print a proof-of-entry receipt for the current outcome; pauses the
-  // auto-reset countdown so the print dialog doesn't race the reset
-  async function printReceipt() {
-    const student = outcome?.resp.student;
+  // print a proof-of-entry receipt for the current (or just-scanned) outcome;
+  // pauses the auto-reset countdown so the print dialog can't race the reset
+  async function printReceipt(resp?: VerifyResponse, opts?: { freshCountdown?: boolean }) {
+    const target = resp ?? outcome?.resp;
+    const student = target?.student;
     if (!student || printing) return;
     setPrinting(true);
     const prevCountdown = countdown;
@@ -318,15 +339,15 @@ export function KioskView({ onExit }: { onExit: () => void }) {
         name: student.name,
         department: student.department,
         year: student.year,
-        checkinAt: outcome?.resp.checkinAt ?? outcome?.at.toISOString() ?? null,
-        status: outcome?.resp.result === "ALREADY_CHECKED_IN" ? "ALREADY_CHECKED_IN" : "GRANTED",
+        checkinAt: target?.checkinAt ?? (resp ? new Date().toISOString() : outcome?.at.toISOString()) ?? null,
+        status: target?.result === "ALREADY_CHECKED_IN" ? "ALREADY_CHECKED_IN" : "GRANTED",
         source: "kiosk",
       });
     } catch {
       /* print unavailable at this desk — kiosk keeps flowing */
     } finally {
       setPrinting(false);
-      if (prevCountdown !== null && resetSecs > 0) setCountdown(resetSecs);
+      if (resetSecs > 0 && (prevCountdown !== null || opts?.freshCountdown)) setCountdown(resetSecs);
       refocus();
     }
   }
@@ -403,6 +424,23 @@ export function KioskView({ onExit }: { onExit: () => void }) {
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-purple-500/30 text-purple-200/70 transition-colors hover:border-purple-400/60 hover:text-purple-100"
           >
             {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleAutoPrint();
+            }}
+            title={autoPrint ? "Auto-print receipts is ON — every new check-in prints" : "Auto-print receipts is OFF"}
+            aria-pressed={autoPrint}
+            className={cn(
+              "hidden h-9 items-center gap-1.5 rounded-xl border px-3 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors sm:flex",
+              autoPrint
+                ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-200 shadow-[0_0_14px_rgba(52,211,153,0.25)]"
+                : "border-purple-500/30 text-purple-200/70 hover:border-purple-400/60 hover:text-purple-100"
+            )}
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {autoPrint ? "auto-print" : "receipts"}
           </button>
           <button
             onClick={(e) => {
@@ -526,7 +564,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
                   ) : (
                     <Printer className="h-3 w-3" />
                   )}
-                  {printing ? "printing…" : "print receipt"}
+                  {printing ? "printing…" : autoPrint ? "print again" : "print receipt"}
                 </button>
               )}
             </motion.div>

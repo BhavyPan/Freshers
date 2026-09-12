@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Trophy,
   UserCheck,
+  Zap,
 } from "lucide-react";
 import {
   Area,
@@ -296,6 +297,20 @@ export function DashboardView() {
     count: t.count,
   }));
 
+  // gate-pace projection — extrapolate the last 30 min of entries to a
+  // "full house" ETA so organizers can plan staffing and stage timing
+  const pace = useMemo(() => {
+    if (!stats) return null;
+    const buckets = stats.timeline ?? [];
+    if (buckets.length < 2) return null;
+    const count30 = buckets.slice(-2).reduce((a, b) => a + b.count, 0);
+    const remaining = stats.notArrived;
+    if (remaining <= 0) return { kind: "done" as const };
+    if (count30 <= 0) return { kind: "stalled" as const, remaining };
+    const etaMin = Math.ceil(remaining / (count30 / 30));
+    return { kind: "flow" as const, count30, etaMin, etaAt: new Date(Date.now() + etaMin * 60000) };
+  }, [stats]);
+
   const deptData = (stats?.studentsByDept ?? []).slice(0, 8).map((d) => ({
     dept: d.dept,
     total: d.total,
@@ -409,6 +424,23 @@ export function DashboardView() {
             <p className="text-[11px] text-purple-200/70">
               Peak entry window: <span className="font-semibold text-purple-100">{format(new Date(stats.busiestWindow.startsAt), "h:mm a")}</span>
               {" "}— <span className="font-semibold tabular-nums text-amber-200">{stats.busiestWindow.count}</span> in 15 min
+            </p>
+          </div>
+        )}
+        {pace && pace.kind === "flow" && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 transition-shadow hover:shadow-[0_0_18px_rgba(16,185,129,0.12)]">
+            <Zap className="h-3.5 w-3.5 shrink-0 text-emerald-300 drop-shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+            <p className="text-[11px] text-purple-200/70">
+              At this pace (<span className="font-semibold tabular-nums text-emerald-200">+{pace.count30}</span> in 30 min) — full house around{" "}
+              <span className="font-semibold text-purple-100">{format(pace.etaAt, "h:mm a")}</span>
+            </p>
+          </div>
+        )}
+        {pace && pace.kind === "stalled" && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-purple-500/15 bg-purple-500/5 px-3 py-2">
+            <Hourglass className="h-3.5 w-3.5 shrink-0 text-purple-300/70" />
+            <p className="text-[11px] text-purple-200/60">
+              No entries in the last 30 min — <span className="font-semibold tabular-nums text-purple-200">{pace.remaining}</span> juniors still pending.
             </p>
           </div>
         )}

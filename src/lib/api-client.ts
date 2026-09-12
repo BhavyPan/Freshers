@@ -203,3 +203,8 @@ export function qrDownloadUrl(format: "png" | "svg" | "pdf") {
 export function passSheetsUrl(scope: "notarrived" | "checkedin" | "full") {
   return `/api/admin/export/pass-sheets?scope=${scope}`;
 }
+
+/** A4 door-signage PDF — one page per department (dept=ALL for the whole pack). */
+export function postersUrl(dept: string) {
+  return `/api/admin/export/posters?dept=${encodeURIComponent(dept)}`;
+}
