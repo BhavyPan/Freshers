@@ -10,6 +10,7 @@ import { Landing } from "./Landing";
 import { VerifyView } from "./VerifyView";
 import { ResultView } from "./ResultView";
 import { KioskView } from "./KioskView";
+import { StatusView } from "./StatusView";
 import { AdminLogin } from "./AdminLogin";
 import { AdminShell, type AdminSection } from "./AdminShell";
 import { DashboardView } from "./DashboardView";
@@ -106,6 +107,9 @@ function PublicArea({ route, navigate }: { route: Extract<AppRoute, { area: "pub
   if (route.step === "kiosk") {
     return <KioskView onExit={() => navigate("#/")} />;
   }
+  if (route.step === "status") {
+    return <StatusView onHome={() => navigate("#/")} />;
+  }
   if (route.step === "verify") {
     return <VerifyView onResult={() => navigate("#/result")} onBack={() => navigate("#/")} />;
   }
@@ -117,6 +121,7 @@ function PublicArea({ route, navigate }: { route: Extract<AppRoute, { area: "pub
           clearVerify();
           navigate("#/");
         }}
+        onViewStatus={(studentId) => navigate(`#/status?id=${encodeURIComponent(studentId)}`)}
       />
     );
   }

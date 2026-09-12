@@ -17,6 +17,28 @@ export function inviteUrlFor(studentId: string): string {
   return `${origin}/#/verify?id=${encodeURIComponent(studentId)}`;
 }
 
+/**
+ * The student's personal "My Entry" status page — live check-in state,
+ * organizer notices and their gate QR. Encoded in the printed receipt QR.
+ */
+export function statusUrlFor(studentId: string): string {
+  if (typeof window === "undefined") return `/#/status?id=${encodeURIComponent(studentId)}`;
+  const { origin } = window.location;
+  return `${origin}/#/status?id=${encodeURIComponent(studentId)}`;
+}
+
+/** WhatsApp deep link sharing a checked-in celebration + invite. */
+export function whatsappEntryUrl(name: string, studentId: string, inside: boolean): string {
+  const headline = inside
+    ? `✦ OBSIDIAN '26 — I'm IN! ✦\n\n${name} just stepped into OBSIDIAN '26.`
+    : `✦ OBSIDIAN '26 — Unfold the Unknown ✦\n\n${name}, your smart-entry pass for OBSIDIAN '26 is ready.`;
+  const text =
+    `${headline}\nID: ${studentId}\n\n` +
+    `Track your live entry status here:\n${statusUrlFor(studentId)}\n\n` +
+    `Not inside yet? Verify in seconds:\n${inviteUrlFor(studentId)}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
 export function whatsappInviteUrl(name: string, studentId: string): string {
   const text =
     `✦ OBSIDIAN '26 — Unfold the Unknown ✦\n\n` +

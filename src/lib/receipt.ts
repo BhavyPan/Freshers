@@ -10,7 +10,7 @@
  */
 
 import QRCode from "qrcode";
-import { inviteUrlFor } from "./pass-card";
+import { statusUrlFor } from "./pass-card";
 
 export interface ReceiptData {
   studentId: string;
@@ -269,12 +269,12 @@ function buildReceiptHtml(data: ReceiptData, qrDataUrl: string): string {
     </div>
     <div class="tear" aria-hidden="true"></div>
     <div class="foot">
-      <div class="qr"><img src="${qrDataUrl}" alt="Re-verify QR code" /></div>
+      <div class="qr"><img src="${qrDataUrl}" alt="My live entry status QR code" /></div>
       <div class="foot-text">
         <div class="scan">KEEP THIS SLIP</div>
-        <div class="hint">Your proof of entry to OBSIDIAN '26. The QR re-opens your
-        personal verify page — show it at any gate if staff need to re-confirm
-        your wristband or pass.</div>
+        <div class="hint">Your proof of entry to OBSIDIAN '26. The QR opens your
+        live entry page — current status, organizer notices and your gate pass.
+        Show it at any gate if staff need to re-confirm your wristband.</div>
       </div>
     </div>
     <div class="tail">
@@ -291,7 +291,7 @@ function buildReceiptHtml(data: ReceiptData, qrDataUrl: string): string {
  * Resolves once the dialog has been dismissed (or printing failed silently).
  */
 export async function printEntryReceipt(data: ReceiptData): Promise<void> {
-  const url = inviteUrlFor(data.studentId);
+  const url = statusUrlFor(data.studentId);
   const qrDataUrl = await QRCode.toDataURL(url, {
     margin: 0,
     width: 220,

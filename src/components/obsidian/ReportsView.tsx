@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   BadgeCheck,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -30,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, exportUrl, passSheetsUrl, postersUrl } from "@/lib/api-client";
-import type { ActivityResponse } from "@/lib/types";
+import type { ActivityResponse, AuditDigestResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Client-side CSV of the current operator standings — instant, no server round-trip. */
@@ -110,6 +111,58 @@ const RESULT_TONES: Record<string, string> = {
   LOOKUP_NONE: "border-slate-400/30 bg-slate-500/10 text-slate-300",
 };
 
+const DIGEST_TONES: Record<string, string> = {
+  ...RESULT_TONES,
+  UNCHECKED: "border-amber-400/30 bg-amber-500/10 text-amber-200",
+  EDITED: "border-purple-400/30 bg-purple-500/10 text-purple-200",
+  DELETED: "border-rose-400/40 bg-rose-500/10 text-rose-300",
+};
+
+const DIGEST_LABELS: Record<string, string> = {
+  GRANTED: "Granted",
+  ALREADY_CHECKED_IN: "Already in",
+  DENIED: "Denied",
+  RATE_LIMITED: "Rate limited",
+  EVENT_CLOSED: "Gate closed",
+  UNCHECKED: "Reversals",
+  EDITED: "Edits",
+  DELETED: "Deletions",
+  LOOKUP_FOUND: "ID found",
+  LOOKUP_NONE: "ID missed",
+};
+
+/** Client-side CSV of the daily digest roll-up. */
+function downloadDigestCsv(digest: AuditDigestResponse) {
+  const cell = (v: string | number | null) => {
+    const s = String(v ?? "");
+    return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const rows: string[] = [
+    ["OBSIDIAN '26 — Daily Audit Digest"].map(cell).join(","),
+    "",
+    ["Day", digest.day].map(cell).join(","),
+    ["Generated", format(new Date(), "dd MMM yyyy HH:mm:ss")].map(cell).join(","),
+    ["Total events", digest.total].map(cell).join(","),
+    ["Unique students touched", digest.uniqueStudents].map(cell).join(","),
+    ["First event", digest.firstAt ? format(new Date(digest.firstAt), "dd MMM yyyy HH:mm:ss") : "—"].map(cell).join(","),
+    ["Last event", digest.lastAt ? format(new Date(digest.lastAt), "dd MMM yyyy HH:mm:ss") : "—"].map(cell).join(","),
+    ["Busiest hour", digest.busiestHour ? `${digest.busiestHour.hourLabel} (${digest.busiestHour.count} events)` : "—"].map(cell).join(","),
+    ["Top desk operator", digest.topActor ? `${digest.topActor.actor} (${digest.topActor.count} actions)` : "—"].map(cell).join(","),
+    "",
+    ["Result", "Count"].map(cell).join(","),
+    ...digest.byResult.map((r) => [r.result, r.count].map(cell).join(",")),
+  ];
+  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `obsidian26-daily-digest-${digest.day}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 function timeFmt(iso: string) {
   try {
     return format(new Date(iso), "dd MMM HH:mm:ss");
@@ -160,6 +213,14 @@ export function ReportsView() {
     refetchInterval: 15000,
   });
 
+  // lazy daily roll-up — fresh on every visit, light 60s keep-warm
+  const digestQuery = useQuery({
+    queryKey: ["audit-digest"],
+    queryFn: () => api.auditDigest(),
+    refetchInterval: 60000,
+  });
+  const digest = digestQuery.data;
+
   const stats = statsQuery.data?.stats;
   const logs = auditQuery.data?.logs ?? [];
   const totalPages = auditQuery.data?.totalPages ?? 1;
@@ -208,6 +269,121 @@ export function ReportsView() {
           </motion.div>
         ))}
       </div>
+
+      {/* daily digest — lazy "today at the door" roll-up */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        className="obs-card obs-card-hover rounded-2xl border border-violet-400/25 p-5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-400/30 bg-violet-500/10 text-violet-300">
+              <CalendarDays className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="flex items-center gap-2 text-sm font-bold text-purple-50">
+                Daily Digest — today at the door
+                <span className="flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                  <span className="obs-live-dot h-1 w-1 rounded-full bg-emerald-400" /> live
+                </span>
+              </p>
+              <p className="mt-0.5 text-[11px] text-purple-200/50">
+                Server-day roll-up of every audit event{digest ? ` · ${digest.day}` : ""} — no cron, computed on load.
+              </p>
+            </div>
+          </div>
+          {digest && digest.total > 0 && (
+            <button
+              onClick={() => downloadDigestCsv(digest)}
+              className="flex items-center gap-1.5 rounded-full border border-amber-400/35 bg-amber-500/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200 transition-all hover:border-amber-300/70 hover:bg-amber-500/20 hover:shadow-[0_0_16px_rgba(245,158,11,0.2)]"
+            >
+              <Download className="h-3 w-3" /> Digest CSV
+            </button>
+          )}
+        </div>
+
+        {!digest ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <Skeleton className="h-16 rounded-xl bg-purple-500/10" />
+            <Skeleton className="h-16 rounded-xl bg-purple-500/10" />
+            <Skeleton className="h-16 rounded-xl bg-purple-500/10" />
+            <Skeleton className="h-16 rounded-xl bg-purple-500/10" />
+          </div>
+        ) : digest.total === 0 ? (
+          <p className="mt-4 rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-5 text-center text-xs text-purple-200/45">
+            No audit events yet today — the digest builds itself as the door gets busy.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-3">
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-purple-300/50">Events today</p>
+                <p className="font-display mt-1 text-2xl font-black tabular-nums text-purple-50">{digest.total.toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-3">
+                <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-purple-300/50">
+                  <Users className="h-3 w-3" /> Juniors touched
+                </p>
+                <p className="font-display mt-1 text-2xl font-black tabular-nums text-purple-50">{digest.uniqueStudents.toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-3">
+                <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-purple-300/50">
+                  <Clock className="h-3 w-3" /> Busiest hour
+                </p>
+                <p className="mt-1 text-sm font-bold text-purple-50">
+                  {digest.busiestHour ? (
+                    <>
+                      {digest.busiestHour.hourLabel}{" "}
+                      <span className="text-[11px] font-semibold text-amber-300">· {digest.busiestHour.count} events</span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </p>
+              </div>
+              <div className="rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-3">
+                <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-purple-300/50">
+                  <Trophy className="h-3 w-3" /> Top desk
+                </p>
+                <p className="mt-1 truncate text-sm font-bold text-purple-50" title={digest.topActor?.actor}>
+                  {digest.topActor ? (
+                    <>
+                      {digest.topActor.actor}{" "}
+                      <span className="text-[11px] font-semibold text-violet-300">· {digest.topActor.count}</span>
+                    </>
+                  ) : (
+                    <span className="text-purple-200/40">self-scan only</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {digest.byResult.map((r) => (
+                <span
+                  key={r.result}
+                  title={`${r.result} · ${r.count}`}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]",
+                    DIGEST_TONES[r.result] ?? "border-purple-400/30 bg-purple-500/10 text-purple-200"
+                  )}
+                >
+                  {DIGEST_LABELS[r.result] ?? r.result.replace(/_/g, " ").toLowerCase()}
+                  <span className="rounded-full bg-white/10 px-1.5 py-px tabular-nums">{r.count}</span>
+                </span>
+              ))}
+              {digest.firstAt && (
+                <span className="ml-auto hidden text-[10px] text-purple-200/35 md:inline">
+                  first {format(new Date(digest.firstAt), "h:mm a")}
+                  {digest.lastAt && ` · last ${format(new Date(digest.lastAt), "h:mm a")}`}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </motion.div>
 
       {/* pass sheets — printable invite QR grid */}
       <motion.div

@@ -405,11 +405,47 @@ body::-webkit-scrollbar-thumb:hover {
   animation: obs-goal-shimmer 2.6s ease-in-out infinite;
 }
 
+/* ============ my-entry status page ============ */
+
+/* rotating conic status ring (inside = emerald, pending = purple) */
+@keyframes obs-ring-spin { to { transform: rotate(360deg); } }
+.obs-status-ring {
+  background: conic-gradient(from 0deg, transparent 0deg, var(--ring-a) 100deg, var(--ring-b) 190deg, transparent 310deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4.5px), #000 calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4.5px), #000 calc(100% - 3.5px));
+  animation: obs-ring-spin 3.4s linear infinite;
+}
+.obs-status-ring-in {
+  --ring-a: rgba(52, 211, 153, 0.16);
+  --ring-b: rgba(52, 211, 153, 0.95);
+}
+.obs-status-ring-pending {
+  --ring-a: rgba(168, 85, 247, 0.16);
+  --ring-b: rgba(216, 180, 254, 0.95);
+}
+
+/* landing how-it-works step chips */
+.obs-step-chip {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+}
+.obs-step-chip:hover {
+  border-color: rgba(216, 180, 254, 0.55);
+  background-color: rgba(88, 28, 135, 0.18);
+  box-shadow: 0 0 22px rgba(168, 85, 247, 0.22), inset 0 1px 0 rgba(216, 180, 254, 0.14);
+}
+.obs-step-chip:hover .obs-step-icon {
+  filter: drop-shadow(0 0 10px rgba(216, 180, 254, 0.9));
+  transform: scale(1.08);
+}
+.obs-step-icon {
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .obs-contour-a, .obs-contour-b, .obs-contour-c, .obs-float, .obs-pulse-glow,
   .obs-spin-slow, .obs-scan-sweep, .obs-live-dot, .obs-shimmer, .obs-spark,
   .obs-ticker, .obs-attract-title, .obs-attract-sweep, .obs-attract-ring,
-  .obs-goal-shimmer::after {
+  .obs-goal-shimmer::after, .obs-status-ring {
     animation: none !important;
   }
 }

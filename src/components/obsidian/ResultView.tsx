@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BadgeCheck, Clock, Compass, HelpCircle, House, Info, Loader2, PauseCircle, Printer, RotateCcw, ShieldAlert, Volume2, VolumeX, XOctagon } from "lucide-react";
+import { BadgeCheck, Clock, Compass, ExternalLink, HelpCircle, House, Info, Loader2, PauseCircle, Printer, RotateCcw, ShieldAlert, Volume2, VolumeX, XOctagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { isSoundEnabled, playFeedback, setSoundEnabled } from "@/lib/feedback";
@@ -20,7 +20,15 @@ function formatTime(iso?: string | null) {
   }
 }
 
-export function ResultView({ onVerifyAnother, onDone }: { onVerifyAnother: () => void; onDone: () => void }) {
+export function ResultView({
+  onVerifyAnother,
+  onDone,
+  onViewStatus,
+}: {
+  onVerifyAnother: () => void;
+  onDone: () => void;
+  onViewStatus?: (studentId: string) => void;
+}) {
   const response = useObsidianStore((s) => s.verifyResponse);
   const lastInput = useObsidianStore((s) => s.lastInput);
   // null = not yet read on client (server renders the enabled icon)
@@ -240,6 +248,21 @@ export function ResultView({ onVerifyAnother, onDone }: { onVerifyAnother: () =>
             {receiptBusy ? "Preparing receipt…" : "Print entry receipt"}
             <span className="ml-1 hidden text-[9px] font-normal uppercase tracking-[0.18em] text-purple-200/40 sm:inline">
               proof of entry
+            </span>
+          </button>
+        )}
+
+        {/* my entry — live personal status page */}
+        {(granted || already) && response.student && onViewStatus && (
+          <button
+            onClick={() => onViewStatus(response.student!.studentId)}
+            className="group mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/[0.06] px-4 py-2.5 text-xs font-semibold text-emerald-200/85 transition-all hover:border-emerald-300/70 hover:bg-emerald-500/15 hover:text-emerald-100 hover:shadow-[0_0_20px_rgba(16,185,129,0.18)]"
+          >
+            <BadgeCheck className="h-3.5 w-3.5 text-emerald-300 transition-transform group-hover:scale-110" />
+            View my entry page
+            <ExternalLink className="h-3 w-3 text-emerald-300/70 transition-transform group-hover:translate-x-0.5" />
+            <span className="ml-1 hidden text-[9px] font-normal uppercase tracking-[0.18em] text-emerald-200/40 sm:inline">
+              live status · shareable
             </span>
           </button>
         )}

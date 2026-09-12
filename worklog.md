@@ -336,3 +336,42 @@ Stage Summary:
 - Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
 - Risks: none known. Poster headcount is generated-at-print time (static once printed) — by design for print; pace ETA assumes steady rate from a 30-min window (labeled "at this pace" so it reads as an estimate).
 - Next-round ideas: horizontal wristband receipt variant, per-dept fill-rate goal posters merge, student "my entry" status mini-page, announcement templates per gate status transition, scheduled audit CSV digest (cron-less, lazy on first admin load of the day).
+
+---
+Task ID: 12 (cron webDevReview round 10)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + student "My Entry" status page + gate-transition notices + daily audit digest + styling pass
+
+Work Log:
+- QA: dev.log all 200s, lint PASS. agent-browser tour: landing (3D + banner + 25/83 + ticker), verify DENIED (fake ID correctly rejected) + GRANTED (2k26cse002 lowercase → Kabir Shah), admin dashboard/registry/qr/reports, kiosk, mobile 390 — zero console errors. QA check-in reverted via audit-logged uncheckin.
+- System STABLE → feature development. Round plan: (1) flagship: public student "My Entry" status mini-page #/status?id=... with live polling + pass QR + share; (2) gate-transition announcement suggestions in QR gate control; (3) daily audit digest card + CSV on Reports; (4) styling: landing 3-step strip, animated status ring, new CSS utilities.
+
+Work Log (continued — implementation):
+
+1. STUDENT "MY ENTRY" STATUS MINI-PAGE (flagship, #/status?id=…):
+   - New public GET /api/public/status?id=… — privacy-safe (no mobile/email ever returned), 30/min/IP rate limit, returns student block + checkedIn + checkinAt + human checkinByLabel ("Self scan at the venue QR" / "Checked in at the desk") + event block (name/tagline/gate status/announcement+expiry) + inside/totalRegistered/checkedInLastHour.
+   - New StatusView: emerald "YOU'RE INSIDE" vs purple "PASS READY" themed cards, rotating conic status ring (.obs-status-ring-in/-pending), identity chips, entry time + method rows, live "N/M inside" + "+N this hour" chips, amber ENTRY PAUSED/GATE CLOSED handling, PASS NOT FOUND rose state, no-id state; personal gate-pass QR (client QRCode, corner brackets, "AT THE DOOR"/"FOR RE-CHECKS" chip); share row (WhatsApp via whatsappEntryUrl, Copy link, branded Pass PNG download via pass-card); AnnouncementBanner + EventStatusBadge reuse; 15s live polling; title set to "My Entry — OBSIDIAN '26".
+   - FIXED mid-QA: id was read only on mount → navigating between two status links kept stale data; now a hashchange listener syncs the id.
+   - Wiring: hash router adds "status" step; ResultView gains emerald "View my entry page" button (granted/already) → #/status?id=…; PRINTED RECEIPT QR now encodes the status page URL (receipt.ts uses statusUrlFor, hint copy updated to "opens your live entry page").
+   - Verified: inside state (OBS26-001), pass-ready state (2k26cse002 lowercase), not-found (NOPE-999), missing-id state, CTA → verify prefill → GRANTED → back to status showing YOU'RE INSIDE + "+1 this hour", desktop 1280 + mobile 390.
+
+2. GATE-TRANSITION SUGGESTED NOTICES (QR gate control): contextual amber strip under the 3-way gate switch (admin only) — PAUSED offers 2 hold-tight notices, CLOSED offers a goodnight notice, OPEN offers "walk right in" only when no notice is live; live-text dedupe hides a chip once its text is the live announcement. One tap broadcasts (no expiry) + invalidates qr/pulse + toast. Round-trip verified: gate PAUSED → strip appeared → broadcast → pulse API carried the new notice → RECENT history gained the entry; gate + demo announcement restored afterwards.
+
+3. DAILY AUDIT DIGEST (reports, cron-less): new admin-guarded GET /api/admin/audit/digest?day=YYYY-MM-DD (server-local default today) — total events, per-result counts (groupBy), busiest hour, top desk operator (excl. SELF), unique students, first/last event. ReportsView gains "Daily Digest — today at the door" card (violet accent): 4 stat tiles, tone-mapped result chips (new DIGEST_TONES/DIGEST_LABELS incl. UNCHECKED/EDITED/DELETED), amber Digest CSV chip (client-side CSV, same pattern as leaderboard), skeleton loading + empty state, 60s keep-warm polling. Verified: live numbers (103 events / 41 juniors / 9:00 AM busiest ×37 / admin ×26), CSV shape via API replication, 401 unauth.
+
+4. STYLING DETAILS (mandatory pass):
+   - Landing: trust row upgraded to a numbered 3-step strip (① SCAN the venue QR → ② VERIFY your student ID → ③ STEP IN into the night) with gradient connectors, numbered gradient badges, hover glow (new .obs-step-chip/.obs-step-icon); verified desktop + 390px wrap.
+   - globals.css: .obs-status-ring (masked conic gradient rotation, emerald/purple variants), .obs-step-chip/.obs-step-icon hover states; both added to the prefers-reduced-motion kill list.
+   - Status page identity chips w/ truncate+title, gate-pass QR corner brackets, themed share buttons (emerald/purple/amber).
+
+5. OPS: dev server was found down late in the round (ERR_CONNECTION_REFUSED; log shows normal output before) — restarted via bun run dev, health 200, all routes re-verified console-clean.
+
+Verification:
+- bun run lint PASS · 8 routes toured (landing/verify/kiosk/status/admin×4) console-error-free · status API 3 cases + digest API + suggestion broadcast round-trip all verified · receipt QR now points at the status page.
+- Data integrity: 2 QA check-ins (2K26CSE002) both reverted via audit-logged uncheckin → 83 registered / 25 in; gate OPEN; demo announcement restored; announcement history gained one legit QA entry ("We've paused entry…") — left as realistic history.
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 33 major features (…previous 29 + student My Entry status page with live polling/share/pass-PNG, gate-transition suggested notices, daily audit digest + CSV, landing 3-step strip + conic status ring styling system).
+- Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk. Status page public at #/status?id=…
+- Risks: status endpoint is rate-limited (30/min/IP) but does reveal a student's entry state to anyone holding the link — acceptable: the link is printed on the student's own receipt (same trust level as before). Dev server died once mid-round (cause unknown, sandbox-side) — restarted fine; watch for recurrence.
+- Next-round ideas: QR scan of gate-pass QR → verify loop E2E test, wristband-style horizontal receipt variant, per-dept fill-rate goal posters merge, scheduled audit digest email, dark/light e-ticket template, volunteer leaderboard trophy page.

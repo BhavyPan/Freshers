@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type AppRoute =
-  | { area: "public"; step: "landing" | "verify" | "result" | "kiosk" }
+  | { area: "public"; step: "landing" | "verify" | "result" | "kiosk" | "status" }
   | { area: "admin"; section: "login" | "dashboard" | "registry" | "qr" | "reports" };
 
 function parseHash(hash: string): AppRoute {
@@ -26,6 +26,7 @@ function parseHash(hash: string): AppRoute {
   if (clean === "verify") return { area: "public", step: "verify" };
   if (clean === "result") return { area: "public", step: "result" };
   if (clean === "kiosk") return { area: "public", step: "kiosk" };
+  if (clean === "status") return { area: "public", step: "status" };
   return { area: "public", step: "landing" };
 }
 

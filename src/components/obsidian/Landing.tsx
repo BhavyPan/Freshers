@@ -160,16 +160,42 @@ export function Landing({ onBegin }: { onBegin: () => void }) {
           </Button>
         </motion.div>
 
-        <motion.div
-          variants={item}
-          className="mt-9 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.2em] text-purple-200/45"
-        >
-          <span className="flex items-center gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5 text-purple-300/70" /> Secure Verification
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Zap className="h-3.5 w-3.5 text-purple-300/70" /> Instant Check-in
-          </span>
+        {/* how it works — 3-step strip */}
+        <motion.div variants={item} className="mt-9" aria-label="How entry works">
+          <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-2.5">
+            {(
+              [
+                { icon: ScanLine, label: "Scan", sub: "the venue QR" },
+                { icon: ShieldCheck, label: "Verify", sub: "your student ID" },
+                { icon: Zap, label: "Step in", sub: "into the night" },
+              ] as const
+            ).map((s, i) => (
+              <span key={s.label} className="flex items-center gap-1.5">
+                <span
+                  className="obs-step-chip flex items-center gap-2.5 rounded-full border border-purple-500/25 bg-[#0b0517]/60 px-4 py-2 backdrop-blur-sm"
+                  title={`Step ${i + 1} — ${s.label} ${s.sub}`}
+                >
+                  <span className="relative flex h-7 w-7 items-center justify-center rounded-full border border-purple-400/30 bg-purple-500/10">
+                    <s.icon className="obs-step-icon h-3.5 w-3.5 text-purple-200/85" />
+                    <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-fuchsia-500 text-[8px] font-black text-white shadow-[0_0_8px_rgba(168,85,247,0.7)]">
+                      {i + 1}
+                    </span>
+                  </span>
+                  <span className="text-left">
+                    <span className="block text-[10.5px] font-bold uppercase tracking-[0.22em] text-purple-100/85">
+                      {s.label}
+                    </span>
+                    <span className="block text-[9px] font-medium uppercase tracking-[0.14em] text-purple-200/40">
+                      {s.sub}
+                    </span>
+                  </span>
+                </span>
+                {i < 2 && (
+                  <span aria-hidden="true" className="hidden h-px w-7 bg-gradient-to-r from-purple-400/50 via-fuchsia-400/35 to-purple-400/20 sm:block" />
+                )}
+              </span>
+            ))}
+          </div>
         </motion.div>
       </motion.div>
 

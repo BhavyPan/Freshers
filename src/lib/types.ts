@@ -147,6 +147,32 @@ export interface PublicPulseResponse {
   recent: { id: string; firstName: string; lastInitial: string; department: string | null; at: string }[];
 }
 
+export interface EntryStatusResponse {
+  ok: boolean;
+  found: boolean;
+  message?: string;
+  student?: {
+    studentId: string;
+    name: string;
+    department: string | null;
+    year: string | null;
+  };
+  checkedIn?: boolean;
+  checkinAt?: string | null;
+  /** "Self scan at the venue QR" | "Checked in at the desk" | null */
+  checkinByLabel?: string | null;
+  event?: {
+    name: string;
+    tagline: string;
+    status: EventStatus;
+    announcement: string | null;
+    announcementExpiresAt: string | null;
+  };
+  inside?: number;
+  totalRegistered?: number;
+  checkedInLastHour?: number;
+}
+
 export interface LookupMatch {
   studentId: string;
   name: string;
@@ -225,4 +251,18 @@ export interface StatsResponse {
     department: string | null;
     checkinAt: string;
   }[];
+}
+
+export interface AuditDigestResponse {
+  ok: boolean;
+  message?: string;
+  /** Server-local day key: YYYY-MM-DD */
+  day: string;
+  total: number;
+  byResult: { result: string; count: number }[];
+  busiestHour: { hourLabel: string; count: number } | null;
+  topActor: { actor: string; count: number } | null;
+  uniqueStudents: number;
+  firstAt: string | null;
+  lastAt: string | null;
 }

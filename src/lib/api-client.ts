@@ -3,8 +3,10 @@
 import type {
   AdminSessionInfo,
   ActivityResponse,
+  AuditDigestResponse,
   AuditResponse,
   EventStatus,
+  EntryStatusResponse,
   EventStatusResponse,
   ImportCommitResponse,
   ImportPreviewResponse,
@@ -159,6 +161,10 @@ export const api = {
 
   pulse: () => request<PublicPulseResponse>("/api/public/pulse"),
 
+  /** Public personal "My Entry" status page (receipt QR / invite link). */
+  entryStatus: (id: string) =>
+    request<EntryStatusResponse>(`/api/public/status?id=${encodeURIComponent(id)}`),
+
   lookup: (mobile: string) =>
     request<LookupResponse>("/api/public/lookup", {
       method: "POST",
@@ -188,6 +194,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ studentId }),
     }),
+
+  /** Lazy daily audit roll-up for the Reports page (day = YYYY-MM-DD, default today). */
+  auditDigest: (day?: string) =>
+    request<AuditDigestResponse>(`/api/admin/audit/digest${day ? `?day=${encodeURIComponent(day)}` : ""}`),
 };
 
 export function exportUrl(scope: "checkedin" | "notarrived" | "full" | "audit", format: "csv" | "xlsx" | "pdf") {

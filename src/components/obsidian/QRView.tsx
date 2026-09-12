@@ -25,6 +25,7 @@ import {
   ScanLine,
   Share2,
   Shield,
+  Sparkles,
   TimerOff,
   Trash2,
 } from "lucide-react";
@@ -81,6 +82,26 @@ const EXPIRY_OPTIONS: { value: number | null; label: string }[] = [
   { value: 60, label: "1h" },
 ];
 
+/** Contextual one-tap notices offered right after a gate-status change. */
+const GATE_SUGGESTIONS: { status: EventStatus; text: string }[] = [
+  {
+    status: "PAUSED",
+    text: "We've paused entry for a few minutes — hold tight at the gate, we'll reopen shortly.",
+  },
+  {
+    status: "PAUSED",
+    text: "The line is long — entry paused briefly. Please stay in the queue, doors reopen soon!",
+  },
+  {
+    status: "CLOSED",
+    text: "Entry is closed for tonight — thank you for coming, juniors! See you at the next one.",
+  },
+  {
+    status: "OPEN",
+    text: "Doors are now fully open — walk right in, the night awaits! \u2728",
+  },
+];
+
 function expiryCountdown(expiresAt: string | null, now: number | null): string | null {
   if (!expiresAt || now === null) return null;
   const ms = new Date(expiresAt).getTime() - now;
@@ -106,6 +127,7 @@ export function QRView() {
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [nowTs, setNowTs] = useState<number | null>(null);
+  const [suggestBusy, setSuggestBusy] = useState<string | null>(null);
 
   useEffect(() => {
     setCanNativeShare(typeof navigator !== "undefined" && "share" in navigator);
@@ -177,6 +199,22 @@ export function QRView() {
       toast({ title: "Could not save announcement", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setSavingAnnouncement(false);
+    }
+  }
+
+  /** One-tap contextual notice from the gate-status strip. */
+  async function broadcastSuggested(text: string) {
+    if (suggestBusy) return;
+    setSuggestBusy(text);
+    try {
+      await api.setAnnouncement(text, null);
+      await qc.invalidateQueries({ queryKey: ["qr"] });
+      await qc.invalidateQueries({ queryKey: ["pulse"] });
+      toast({ title: "Announcement live", description: "Every public screen shows it within seconds." });
+    } catch (err) {
+      toast({ title: "Could not broadcast", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSuggestBusy(null);
     }
   }
 
@@ -333,6 +371,50 @@ export function QRView() {
             })}
           </div>
           {!isAdmin && <p className="mt-3 text-[11px] text-purple-200/40">Gate control is available to admins only.</p>}
+
+          {/* contextual suggested notices — appears with the matching gate state */}
+          {isAdmin &&
+            (() => {
+              const live = data.announcement?.trim() ?? "";
+              const isGateTrouble = data.event.status !== "OPEN";
+              const chips = GATE_SUGGESTIONS.filter(
+                (s) =>
+                  s.status === data.event.status &&
+                  (isGateTrouble ? s.text !== live : live === "")
+              );
+              if (chips.length === 0) return null;
+              return (
+                <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/[0.05] p-3.5">
+                  <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200/80">
+                    <Sparkles className="h-3 w-3" />
+                    Suggested notice — gate {data.event.status.toLowerCase()}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-purple-200/50">
+                    Tell everyone at the gate why. One tap broadcasts to the landing page, verify screen and kiosk.
+                  </p>
+                  <div className="mt-2.5 flex flex-col gap-2">
+                    {chips.map((s) => (
+                      <button
+                        key={s.text}
+                        onClick={() => broadcastSuggested(s.text)}
+                        disabled={suggestBusy !== null}
+                        className="group flex items-center gap-2.5 rounded-lg border border-amber-400/25 bg-[#170e04]/60 px-3 py-2.5 text-left transition-all hover:border-amber-300/60 hover:bg-amber-500/10 hover:shadow-[0_0_16px_rgba(245,158,11,0.15)] disabled:opacity-50"
+                      >
+                        <Megaphone className="h-3.5 w-3.5 shrink-0 text-amber-300/80" />
+                        <span className="min-w-0 flex-1 text-[11px] leading-snug text-amber-100/85">{s.text}</span>
+                        {suggestBusy === s.text ? (
+                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-300" />
+                        ) : (
+                          <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-amber-300/70 transition-colors group-hover:text-amber-200">
+                            broadcast
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
         </motion.div>
 
         {/* live announcement */}
