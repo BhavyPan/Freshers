@@ -1,7 +1,7 @@
 export type AdminRole = "ADMIN" | "VOLUNTEER";
 
 export type VerifyResult = "GRANTED" | "ALREADY_CHECKED_IN" | "DENIED";
-export type VerifyOutcome = VerifyResult | "RATE_LIMITED" | "INVALID" | "EVENT_CLOSED";
+export type VerifyOutcome = VerifyResult | "RATE_LIMITED" | "INVALID" | "EVENT_CLOSED" | "QR_REQUIRED";
 export type EventStatus = "OPEN" | "PAUSED" | "CLOSED";
 
 export interface StudentPublicInfo {
@@ -21,6 +21,7 @@ export interface VerifyResponse {
 }
 
 export interface AdminSessionInfo {
+  id: string;
   username: string;
   displayName: string | null;
   role: AdminRole;
@@ -65,6 +66,14 @@ export interface ImportMapping {
   year: number | null;
 }
 
+export interface ImportIssue {
+  row: number;
+  code: "MISSING_ID" | "INVALID_ID" | "MISSING_NAME" | "DUPLICATE_ID";
+  field: "studentId" | "name";
+  message: string;
+  value?: string;
+}
+
 export interface ImportPreviewResponse {
   ok: boolean;
   sheets: string[];
@@ -76,10 +85,14 @@ export interface ImportPreviewResponse {
   validation: {
     valid: number;
     missingId: number;
+    invalidId: number;
     missingName: number;
     duplicateIdsInFile: number;
     existingInDb: number;
   };
+  issues: ImportIssue[];
+  issuesTruncated: boolean;
+  extraColumns: string[];
 }
 
 export interface ImportCommitResponse {
@@ -90,6 +103,8 @@ export interface ImportCommitResponse {
   deletedAll: boolean;
   totalInDb: number;
   message: string;
+  issues: ImportIssue[];
+  issuesTruncated: boolean;
 }
 
 export interface AuditRow {
@@ -118,6 +133,8 @@ export interface QrResponse {
   url: string;
   qrDataUrl: string;
   generatedAt: string;
+  requireQrToken: boolean;
+  kioskUrl: string;
   announcement: string | null;
   announcementExpiresAt: string | null;
   announcementHistory: { text: string; at: string }[];
@@ -128,6 +145,7 @@ export interface EventStatusResponse {
   status: EventStatus;
   eventName: string;
   tagline: string;
+  requireQrToken: boolean;
   announcement: string | null;
   announcementExpiresAt: string | null;
   announcementHistory: { text: string; at: string }[];

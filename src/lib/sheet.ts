@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
-import { sanitizeCell } from '@/lib/normalize'
-import type { ImportMapping } from '@/lib/types'
+import { isValidStudentId, normalizeStudentId, sanitizeCell } from '@/lib/normalize'
+import type { ImportIssue, ImportMapping } from '@/lib/types'
 
 export const MAX_IMPORT_SIZE = 8 * 1024 * 1024
 
@@ -93,4 +93,120 @@ export function isValidMapping(mapping: unknown): mapping is ImportMapping {
     Number.isInteger(m.name) &&
     m.name >= 0
   )
+}
+
+export interface StagedImportEntry {
+  studentId: string
+  name: string
+  mobile: string
+  department: string
+  email: string
+  year: string
+  extraData: Record<string, string>
+}
+
+export interface StagedImport {
+  entries: StagedImportEntry[]
+  issues: ImportIssue[]
+  issueCount: number
+  issuesTruncated: boolean
+  extraColumns: string[]
+  validation: {
+    valid: number
+    missingId: number
+    invalidId: number
+    missingName: number
+    duplicateIdsInFile: number
+  }
+}
+
+const MAX_REPORTED_ISSUES = 100
+
+export function stageImportRows(
+  headers: string[],
+  dataRows: string[][],
+  mapping: ImportMapping
+): StagedImport {
+  const mappedIndices = new Set(
+    Object.values(mapping).filter((value): value is number => typeof value === 'number')
+  )
+  const extraColumns = headers
+    .map((header, index) => ({ header: sanitizeCell(header), index }))
+    .filter(({ header, index }) => header !== '' && !mappedIndices.has(index))
+  const seenIds = new Set<string>()
+  const entries: StagedImportEntry[] = []
+  const issues: ImportIssue[] = []
+  let issueCount = 0
+  let missingId = 0
+  let invalidId = 0
+  let missingName = 0
+  let duplicateIdsInFile = 0
+
+  const addIssue = (issue: ImportIssue): void => {
+    issueCount += 1
+    if (issues.length < MAX_REPORTED_ISSUES) issues.push(issue)
+  }
+
+  dataRows.forEach((row, index) => {
+    const rowNumber = index + 2
+    const studentId = normalizeStudentId(cellAt(row, mapping.studentId))
+    const name = cellAt(row, mapping.name)
+    let valid = true
+    if (!studentId) {
+      missingId += 1
+      valid = false
+      addIssue({ row: rowNumber, code: 'MISSING_ID', field: 'studentId', message: 'Student ID is required' })
+    } else if (!isValidStudentId(studentId)) {
+      invalidId += 1
+      valid = false
+      addIssue({
+        row: rowNumber,
+        code: 'INVALID_ID',
+        field: 'studentId',
+        message: 'Student ID format is invalid',
+        value: studentId.slice(0, 40),
+      })
+    } else if (seenIds.has(studentId)) {
+      duplicateIdsInFile += 1
+      valid = false
+      addIssue({
+        row: rowNumber,
+        code: 'DUPLICATE_ID',
+        field: 'studentId',
+        message: 'Duplicate Student ID in this file',
+        value: studentId,
+      })
+    }
+    if (!name) {
+      missingName += 1
+      valid = false
+      addIssue({ row: rowNumber, code: 'MISSING_NAME', field: 'name', message: 'Name is required' })
+    }
+    if (studentId) seenIds.add(studentId)
+    if (!valid) return
+
+    const extraData: Record<string, string> = {}
+    for (const column of extraColumns) {
+      const value = cellAt(row, column.index)
+      if (value) extraData[column.header] = value
+    }
+    entries.push({
+      studentId,
+      name,
+      mobile: cellAt(row, mapping.mobile),
+      department: cellAt(row, mapping.department),
+      email: cellAt(row, mapping.email),
+      year: cellAt(row, mapping.year),
+      extraData,
+    })
+  })
+
+  return {
+    entries,
+    issues,
+    issueCount,
+    issuesTruncated: issueCount > issues.length,
+    extraColumns: extraColumns.map(({ header }) => header),
+    validation: { valid: entries.length, missingId, invalidId, missingName, duplicateIdsInFile },
+  }
 }

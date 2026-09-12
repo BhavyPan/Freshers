@@ -1,32 +1,40 @@
-const hits = new Map<string, number[]>()
-const MAX_KEYS = 5000
-
-function prune(now: number, windowMs: number): void {
-  for (const [key, stamps] of hits) {
-    const fresh = stamps.filter((t) => now - t < windowMs)
-    if (fresh.length === 0) hits.delete(key)
-    else hits.set(key, fresh)
-  }
-  if (hits.size >= MAX_KEYS) hits.clear()
-}
+import { createHmac } from 'crypto'
+import { db } from '@/lib/db'
+import { getIpHashSecret } from '@/lib/env'
 
 export interface RateLimitResult {
   allowed: boolean
   retryAfterMs: number
 }
 
-export function checkRateLimit(key: string, limit = 12, windowMs = 60000): RateLimitResult {
+function hashKey(key: string): string {
+  return createHmac('sha256', getIpHashSecret()).update(key).digest('hex')
+}
+
+export async function checkRateLimit(
+  key: string,
+  limit = 12,
+  windowMs = 60000
+): Promise<RateLimitResult> {
   const now = Date.now()
-  if (hits.size >= MAX_KEYS) prune(now, windowMs)
-  const list = (hits.get(key) ?? []).filter((t) => now - t < windowMs)
-  if (list.length >= limit) {
-    hits.set(key, list)
-    const oldest = list[0] ?? now
-    return { allowed: false, retryAfterMs: Math.max(oldest + windowMs - now, 0) }
+  const windowStartMs = Math.floor(now / windowMs) * windowMs
+  const windowStart = new Date(windowStartMs)
+  const expiresAt = new Date(windowStartMs + windowMs * 2)
+  const keyHash = hashKey(key)
+  const bucket = await db.rateLimitBucket.upsert({
+    where: { keyHash_windowStart: { keyHash, windowStart } },
+    update: { count: { increment: 1 }, expiresAt },
+    create: { keyHash, windowStart, count: 1, expiresAt },
+  })
+
+  // Keep cleanup off the critical path and best-effort.
+  if (Math.random() < 0.01) {
+    void db.rateLimitBucket.deleteMany({ where: { expiresAt: { lt: new Date(now) } } }).catch(() => undefined)
   }
-  list.push(now)
-  hits.set(key, list)
-  return { allowed: true, retryAfterMs: 0 }
+  return {
+    allowed: bucket.count <= limit,
+    retryAfterMs: Math.max(windowStartMs + windowMs - now, 0),
+  }
 }
 
 export function getClientIp(req: Request): string {
@@ -38,4 +46,11 @@ export function getClientIp(req: Request): string {
   const real = req.headers.get('x-real-ip')
   if (real && real.trim()) return real.trim()
   return 'unknown'
+}
+
+export function hashClientIp(req: Request): string {
+  return createHmac('sha256', getIpHashSecret())
+    .update(getClientIp(req))
+    .digest('hex')
+    .slice(0, 24)
 }

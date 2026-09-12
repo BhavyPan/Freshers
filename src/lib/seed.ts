@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs'
+import type { AuditResult } from '@prisma/client'
 import { db } from '@/lib/db'
 import { normalizeStudentId } from '@/lib/normalize'
 
@@ -104,6 +105,18 @@ async function seedStudents(): Promise<void> {
     }
   }
 
+  for (const student of created) {
+    if (!student.checkedIn || !student.checkinAt) continue
+    await db.checkIn.create({
+      data: {
+        studentId: student.id,
+        studentKey: student.studentId,
+        enteredAt: student.checkinAt,
+        method: 'SELF',
+      },
+    })
+  }
+
   await seedAuditLogs(created, now)
 }
 
@@ -111,7 +124,7 @@ async function seedAuditLogs(students: SeededStudent[], now: number): Promise<vo
   const logs: {
     rawInput: string
     lookupId: string
-    result: string
+    result: AuditResult
     studentId?: string
     studentKey?: string
     createdAt: Date
@@ -171,15 +184,16 @@ async function seedAuditLogs(students: SeededStudent[], now: number): Promise<vo
   }
 }
 
-export async function runSeed(): Promise<void> {
-  const settingsCount = await db.eventSettings.count()
-  if (settingsCount === 0) {
-    try {
-      await db.eventSettings.create({ data: {} })
-    } catch {
-      /* concurrent seed — ignore */
-    }
+export async function seedDemoData(): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Demo seeding is disabled in production')
   }
+
+  await db.eventSettings.upsert({
+    where: { id: 'primary' },
+    update: {},
+    create: { id: 'primary' },
+  })
 
   await ensureAdminUser('admin', 'obsidian26', 'ADMIN', 'Head Organizer')
   await ensureAdminUser('volunteer', 'volunteer26', 'VOLUNTEER', 'Entry Desk')
@@ -188,16 +202,4 @@ export async function runSeed(): Promise<void> {
   if (studentCount === 0) {
     await seedStudents()
   }
-}
-
-let seedPromise: Promise<void> | null = null
-
-export function ensureSeeded(): Promise<void> {
-  if (!seedPromise) {
-    seedPromise = runSeed().catch((err) => {
-      seedPromise = null
-      throw err
-    })
-  }
-  return seedPromise
 }

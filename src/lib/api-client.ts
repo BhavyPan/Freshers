@@ -177,6 +177,12 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
+  setQrSecurity: (requireQrToken: boolean) =>
+    request<EventStatusResponse>("/api/admin/event", {
+      method: "PATCH",
+      body: JSON.stringify({ requireQrToken }),
+    }),
+
   setAnnouncement: (text: string | null, expiresInMinutes?: number | null) =>
     request<EventStatusResponse>("/api/admin/event", {
       method: "PATCH",

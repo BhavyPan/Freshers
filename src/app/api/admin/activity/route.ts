@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
 import type { ActivityResponse } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +20,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
     const url = new URL(req.url)
     const windowHours = Math.min(
       168,

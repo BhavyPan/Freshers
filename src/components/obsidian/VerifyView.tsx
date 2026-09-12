@@ -88,6 +88,12 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
           onResult();
           return;
         }
+        if (err.status === 403) {
+          const resp: VerifyResponse = { ok: false, result: "QR_REQUIRED", message: err.message, tokenValid: false };
+          setVerify(trimmed, resp);
+          onResult();
+          return;
+        }
         const message = err.status === 429 ? "Too many attempts — please wait a moment." : err.message;
         const resp: VerifyResponse = { ok: false, result: "RATE_LIMITED", message };
         setVerify(trimmed, resp);

@@ -2,28 +2,22 @@ import QRCode from 'qrcode'
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib'
 import type { EventSettings } from '@prisma/client'
 import { db } from '@/lib/db'
-import { ensureSeeded } from '@/lib/seed'
+import { canonicalBaseUrl } from '@/lib/env'
 
 const QR_DARK = '#1a0b2e'
 const QR_LIGHT = '#ffffff'
 
 export function getBaseUrl(req: Request): string {
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'localhost:3000'
-  const proto = req.headers.get('x-forwarded-proto') ?? 'http'
-  return `${proto}://${host}`
+  return canonicalBaseUrl(req)
 }
 
 export async function getEventSettings(): Promise<EventSettings> {
-  await ensureSeeded()
-  const settings = await db.eventSettings.findFirst()
-  if (settings) return expireAnnouncement(settings)
-  try {
-    return await db.eventSettings.create({ data: {} })
-  } catch {
-    const retry = await db.eventSettings.findFirst()
-    if (retry) return expireAnnouncement(retry)
-    throw new Error('Event settings unavailable')
-  }
+  const settings = await db.eventSettings.upsert({
+    where: { id: 'primary' },
+    update: {},
+    create: { id: 'primary' },
+  })
+  return expireAnnouncement(settings)
 }
 
 /**
@@ -48,10 +42,9 @@ async function expireAnnouncement(settings: EventSettings): Promise<EventSetting
 }
 
 /** The announcement history is stored as a JSON string — parse defensively. */
-export function parseAnnouncementHistory(raw: string | null | undefined): { text: string; at: string }[] {
-  if (!raw) return []
+export function parseAnnouncementHistory(raw: unknown): { text: string; at: string }[] {
   try {
-    const parsed: unknown = JSON.parse(raw)
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter(
@@ -72,11 +65,11 @@ export function parseAnnouncementHistory(raw: string | null | undefined): { text
  * by text so re-posting the same notice just bumps it to the top, capped 6).
  */
 export function buildAnnouncementHistory(
-  currentRaw: string | null | undefined,
+  currentRaw: unknown,
   text: string
-): string {
+): { text: string; at: string }[] {
   const existing = parseAnnouncementHistory(currentRaw).filter((e) => e.text !== text)
-  return JSON.stringify([{ text, at: new Date().toISOString() }, ...existing].slice(0, 6))
+  return [{ text, at: new Date().toISOString() }, ...existing].slice(0, 6)
 }
 
 export async function buildEventUrl(req: Request): Promise<string> {

@@ -1,11 +1,11 @@
-import { createHash } from 'crypto'
+import type { AuditResult } from '@prisma/client'
 import { db } from '@/lib/db'
-import { getClientIp } from '@/lib/rate-limit'
+import { hashClientIp } from '@/lib/rate-limit'
 
 export interface AuditEntry {
   rawInput: string
   lookupId: string
-  result: string
+  result: AuditResult
   studentId?: string
   studentKey?: string
   actor?: string | null // desk operator username for MANUAL actions
@@ -14,8 +14,7 @@ export interface AuditEntry {
 
 export async function logAudit(entry: AuditEntry): Promise<void> {
   try {
-    const ip = getClientIp(entry.req)
-    const ipHash = ip ? createHash('sha256').update(ip).digest('hex').slice(0, 16) : null
+    const ipHash = hashClientIp(entry.req)
     const userAgent = entry.req.headers.get('user-agent')
     await db.auditLog.create({
       data: {

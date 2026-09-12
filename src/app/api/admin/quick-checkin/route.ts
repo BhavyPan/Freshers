@@ -4,12 +4,15 @@ import { requireAdmin } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { normalizeStudentId, isValidStudentId } from '@/lib/normalize'
 import type { QuickCheckinResponse } from '@/lib/types'
+import { requireSameOrigin } from '@/lib/security'
 
 /**
  * Manual check-in from the entry desk — for juniors whose phone died / no QR.
  * Volunteers + admins allowed. Uses the same duplicate-protection as self check-in.
  */
 export async function POST(req: Request): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
   const guard = await requireAdmin()
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
@@ -64,12 +67,26 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const now = new Date()
-    const updated = await db.student.updateMany({
-      where: { id: student.id, checkedIn: false },
-      data: { checkedIn: true, checkinAt: now, checkinBy: guard.user.username },
+    const checkedIn = await db.$transaction(async (tx) => {
+      const updated = await tx.student.updateMany({
+        where: { id: student.id, checkedIn: false },
+        data: { checkedIn: true, checkinAt: now, checkinBy: guard.user.username },
+      })
+      if (updated.count === 0) return false
+      await tx.checkIn.create({
+        data: {
+          studentId: student.id,
+          studentKey: student.studentId,
+          enteredAt: now,
+          method: 'DESK',
+          actorUserId: guard.user.id,
+          actorUsername: guard.user.username,
+        },
+      })
+      return true
     })
 
-    if (updated.count === 0) {
+    if (!checkedIn) {
       return NextResponse.json({
         ok: true,
         result: 'ALREADY_CHECKED_IN',

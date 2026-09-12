@@ -286,10 +286,30 @@ export function ImportWizard({ onDone }: { onDone: () => void }) {
               <div className="mt-5 flex flex-wrap gap-2">
                 <VChip tone="ok" label={`${preview.validation.valid} valid rows`} />
                 {preview.validation.missingId > 0 && <VChip tone="bad" label={`${preview.validation.missingId} missing ID`} />}
+                {preview.validation.invalidId > 0 && <VChip tone="bad" label={`${preview.validation.invalidId} invalid ID`} />}
                 {preview.validation.missingName > 0 && <VChip tone="bad" label={`${preview.validation.missingName} missing name`} />}
                 {preview.validation.duplicateIdsInFile > 0 && <VChip tone="warn" label={`${preview.validation.duplicateIdsInFile} duplicate IDs in file`} />}
                 {preview.validation.existingInDb > 0 && <VChip tone="info" label={`${preview.validation.existingInDb} already in DB`} />}
+                {preview.extraColumns.length > 0 && <VChip tone="info" label={`${preview.extraColumns.length} extra columns preserved`} />}
               </div>
+              {preview.issues.length > 0 && (
+                <div className="mt-4 max-h-40 overflow-y-auto rounded-xl border border-rose-500/20 bg-rose-950/15 p-3">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-rose-200/70">
+                    Rows skipped during import
+                  </p>
+                  <div className="space-y-1.5">
+                    {preview.issues.map((issue, index) => (
+                      <p key={issue.row + "-" + issue.code + "-" + index} className="text-[11px] text-rose-100/70">
+                        <span className="font-mono font-semibold text-rose-200">Row {issue.row}</span>
+                        {" - "}{issue.message}{issue.value ? ": " + issue.value : ""}
+                      </p>
+                    ))}
+                  </div>
+                  {preview.issuesTruncated && (
+                    <p className="mt-2 text-[10px] text-rose-200/50">Only the first 100 issues are shown.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* sample preview */}

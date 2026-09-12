@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { ensureSeeded } from '@/lib/seed'
 import { getEventSettings } from '@/lib/qr'
 import type { EventStatus, PublicPulseResponse } from '@/lib/types'
 
@@ -12,7 +11,6 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(): Promise<NextResponse> {
   try {
-    await ensureSeeded()
     const [settings, checkedIn, totalRegistered, recent, lastHour] = await Promise.all([
       getEventSettings(),
       db.student.count({ where: { checkedIn: true } }),

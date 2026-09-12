@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
-import { ensureSeeded } from '@/lib/seed'
 import type { LookupResponse } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -60,7 +59,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const ip = getClientIp(req)
-    const rateLimit = checkRateLimit(`lookup:${ip}`, 5, 60000)
+    const rateLimit = await checkRateLimit(`lookup:${ip}`, 5, 60000)
     if (!rateLimit.allowed) {
       await logAudit({ rawInput: `mobile ••• ${mobile.slice(-4)}`, lookupId: 'MOBILE_LOOKUP', result: 'RATE_LIMITED', req })
       return NextResponse.json(
@@ -69,7 +68,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       )
     }
 
-    await ensureSeeded()
 
     // exact match on the stored mobile (compared on its digit-normalized tail)
     const candidates = await db.student.findMany({

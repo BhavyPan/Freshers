@@ -3,7 +3,6 @@ import { format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
 import { buildAttendancePdf, buildCsv, buildXlsx, formatCheckinTime, type ExportRow } from '@/lib/export'
 
 export async function GET(req: Request): Promise<NextResponse | Response> {
@@ -12,7 +11,6 @@ export async function GET(req: Request): Promise<NextResponse | Response> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
     const url = new URL(req.url)
     const scopeParam = (url.searchParams.get('scope') ?? 'full').trim().toLowerCase()
     const formatParam = (url.searchParams.get('format') ?? 'csv').trim().toLowerCase()

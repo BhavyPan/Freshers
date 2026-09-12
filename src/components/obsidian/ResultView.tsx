@@ -41,7 +41,12 @@ export function ResultView({
     if (!response) return;
     if (response.result === "GRANTED") playFeedback("granted");
     else if (response.result === "ALREADY_CHECKED_IN") playFeedback("already");
-    else if (response.result === "DENIED" || response.result === "RATE_LIMITED" || response.result === "EVENT_CLOSED")
+    else if (
+      response.result === "DENIED" ||
+      response.result === "RATE_LIMITED" ||
+      response.result === "EVENT_CLOSED" ||
+      response.result === "QR_REQUIRED"
+    )
       playFeedback("denied");
   }, [response]);
 
@@ -97,6 +102,7 @@ export function ResultView({
   const already = response.result === "ALREADY_CHECKED_IN";
   const denied = response.result === "DENIED";
   const closed = response.result === "EVENT_CLOSED";
+  const qrRequired = response.result === "QR_REQUIRED";
   const limited = response.result === "RATE_LIMITED" || response.result === "INVALID";
 
   return (
@@ -121,7 +127,7 @@ export function ResultView({
             ? "border-purple-400/50 bg-gradient-to-b from-[#1b0d38]/95 to-[#0a0514]/95 shadow-[0_0_60px_rgba(147,51,234,0.35)]"
             : already
               ? "border-amber-400/35 bg-gradient-to-b from-[#241505]/95 to-[#0a0514]/95 shadow-[0_0_45px_rgba(245,158,11,0.18)]"
-              : closed
+              : closed || qrRequired
                 ? "border-amber-400/45 bg-gradient-to-b from-[#1f1605]/95 to-[#0a0514]/95 shadow-[0_0_50px_rgba(245,158,11,0.22)]"
                 : "border-rose-500/40 bg-gradient-to-b from-[#2a0a12]/95 to-[#0a0514]/95 shadow-[0_0_45px_rgba(225,29,72,0.22)]"
         }`}
@@ -129,7 +135,7 @@ export function ResultView({
         {/* top glow bar */}
         <div
           className={`absolute inset-x-0 top-0 h-1 ${
-            granted ? "bg-gradient-to-r from-transparent via-purple-300 to-transparent" : already || closed ? "bg-gradient-to-r from-transparent via-amber-300 to-transparent" : "bg-gradient-to-r from-transparent via-rose-400 to-transparent"
+            granted ? "bg-gradient-to-r from-transparent via-purple-300 to-transparent" : already || closed || qrRequired ? "bg-gradient-to-r from-transparent via-amber-300 to-transparent" : "bg-gradient-to-r from-transparent via-rose-400 to-transparent"
           }`}
         />
 
@@ -142,7 +148,7 @@ export function ResultView({
             className={`relative flex h-24 w-24 items-center justify-center rounded-full ${
               granted
                 ? "border border-purple-300/50 bg-purple-500/15"
-                : already || closed
+                : already || closed || qrRequired
                   ? "border border-amber-300/40 bg-amber-500/10"
                   : "border border-rose-400/40 bg-rose-500/10"
             }`}
@@ -159,6 +165,8 @@ export function ResultView({
               <Clock className="h-11 w-11 text-amber-300 drop-shadow-[0_0_12px_rgba(245,158,11,0.7)]" />
             ) : closed ? (
               <PauseCircle className="h-11 w-11 text-amber-300 drop-shadow-[0_0_12px_rgba(245,158,11,0.7)]" />
+            ) : qrRequired ? (
+              <ShieldAlert className="h-11 w-11 text-amber-300 drop-shadow-[0_0_12px_rgba(245,158,11,0.7)]" />
             ) : denied ? (
               <XOctagon className="h-11 w-11 text-rose-300 drop-shadow-[0_0_12px_rgba(244,63,94,0.8)]" />
             ) : (
@@ -170,10 +178,10 @@ export function ResultView({
         {/* headline */}
         <h1
           className={`font-display mt-6 text-center text-2xl font-black tracking-wide sm:text-3xl ${
-            granted ? "obs-gradient-text obs-text-glow" : already || closed ? "text-amber-200" : denied ? "text-rose-200" : "text-purple-200"
+            granted ? "obs-gradient-text obs-text-glow" : already || closed || qrRequired ? "text-amber-200" : denied ? "text-rose-200" : "text-purple-200"
           }`}
         >
-          {granted ? "ACCESS GRANTED" : already ? "ALREADY CHECKED IN" : denied ? "ACCESS DENIED" : closed ? "ENTRY PAUSED" : "TRY AGAIN"}
+          {granted ? "ACCESS GRANTED" : already ? "ALREADY CHECKED IN" : denied ? "ACCESS DENIED" : closed ? "ENTRY PAUSED" : qrRequired ? "OFFICIAL QR REQUIRED" : "TRY AGAIN"}
         </h1>
         <p className="mt-2.5 text-center text-sm leading-relaxed text-purple-100/60">{response.message}</p>
 

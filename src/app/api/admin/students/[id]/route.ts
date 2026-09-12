@@ -4,8 +4,8 @@ import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { sanitizeCell } from '@/lib/normalize'
-import { ensureSeeded } from '@/lib/seed'
 import type { StudentRow } from '@/lib/types'
+import { requireSameOrigin } from '@/lib/security'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -78,12 +78,13 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
 }
 
 export async function PATCH(req: Request, context: RouteContext): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
   const guard = await requireAdmin()
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
     const { id } = await context.params
     const student = await db.student.findUnique({ where: { id } })
     if (!student) {
@@ -100,9 +101,25 @@ export async function PATCH(req: Request, context: RouteContext): Promise<NextRe
     const action = typeof parsed?.action === 'string' ? parsed.action : ''
 
     if (action === 'checkin') {
-      const updated = await db.student.updateMany({
-        where: { id: student.id, checkedIn: false },
-        data: { checkedIn: true, checkinAt: new Date(), checkinBy: guard.user.username },
+      const enteredAt = new Date()
+      const updated = await db.$transaction(async (tx) => {
+        const changed = await tx.student.updateMany({
+          where: { id: student.id, checkedIn: false },
+          data: { checkedIn: true, checkinAt: enteredAt, checkinBy: guard.user.username },
+        })
+        if (changed.count > 0) {
+          await tx.checkIn.create({
+            data: {
+              studentId: student.id,
+              studentKey: student.studentId,
+              enteredAt,
+              method: 'DESK',
+              actorUserId: guard.user.id,
+              actorUsername: guard.user.username,
+            },
+          })
+        }
+        return changed
       })
       if (updated.count > 0) {
         await logAudit({
@@ -127,10 +144,21 @@ export async function PATCH(req: Request, context: RouteContext): Promise<NextRe
         )
       }
       const reason = typeof parsed?.reason === 'string' ? sanitizeCell(parsed.reason) : ''
-      await db.student.updateMany({
-        where: { id: student.id, checkedIn: true },
-        data: { checkedIn: false, checkinAt: null, checkinBy: null },
-      })
+      const revertedAt = new Date()
+      await db.$transaction([
+        db.student.updateMany({
+          where: { id: student.id, checkedIn: true },
+          data: { checkedIn: false, checkinAt: null, checkinBy: null },
+        }),
+        db.checkIn.updateMany({
+          where: { studentKey: student.studentId, revertedAt: null },
+          data: {
+            revertedAt,
+            reversedByUserId: guard.user.id,
+            reversalReason: reason || null,
+          },
+        }),
+      ])
       await logAudit({
         rawInput: `[MANUAL] ${student.studentId}${reason ? ` — ${reason}` : ''}`,
         lookupId: student.studentId,
@@ -189,6 +217,8 @@ export async function PATCH(req: Request, context: RouteContext): Promise<NextRe
 }
 
 export async function DELETE(req: Request, context: RouteContext): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
   const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })

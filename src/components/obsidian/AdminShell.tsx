@@ -156,7 +156,7 @@ function SettingsDialog({
     e?.preventDefault();
     setError(null);
     if (next.length < 8) {
-      setError("New password must be at least 8 characters.");
+      setError("New password must be at least 12 characters.");
       return;
     }
     if (next !== confirm) {
@@ -194,7 +194,7 @@ function SettingsDialog({
             <Settings className="h-4.5 w-4.5 text-purple-300" /> Account settings
           </DialogTitle>
           <DialogDescription className="text-purple-200/60">
-            Rotate your password after the event setup handover. Minimum 8 characters.
+            Rotate your password after the event setup handover. Minimum 12 characters.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3.5">

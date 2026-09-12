@@ -3,8 +3,39 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AdminRole {
+  ADMIN
+  VOLUNTEER
+}
+
+enum EventStatus {
+  OPEN
+  PAUSED
+  CLOSED
+}
+
+enum AuditResult {
+  GRANTED
+  ALREADY_CHECKED_IN
+  DENIED
+  RATE_LIMITED
+  EVENT_CLOSED
+  TOKEN_REJECTED
+  LOOKUP_FOUND
+  LOOKUP_NONE
+  UNCHECKED
+  EDITED
+  DELETED
+}
+
+enum CheckInMethod {
+  SELF
+  DESK
 }
 
 // Registered students imported from Excel/CSV (the verification database)
@@ -16,12 +47,15 @@ model Student {
   department String?
   email      String?
   year       String?
-  extraData  String? // JSON string of any additional imported columns
+  extraData  Json? // unmapped registration columns, keyed by source header
   checkedIn  Boolean   @default(false)
   checkinAt  DateTime?
   checkinBy  String? // SELF (QR scan) or admin username for corrections
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  checkIns  CheckIn[]
+  auditLogs AuditLog[]
 
   @@index([checkedIn])
   @@index([department])
@@ -33,18 +67,50 @@ model AdminUser {
   username     String   @unique
   passwordHash String
   displayName  String?
-  role         String   @default("ADMIN") // ADMIN | VOLUNTEER
+  role         AdminRole @default(ADMIN)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  sessions        AdminSession[]
+  checkIns        CheckIn[] @relation("CheckInActor")
+  reversedEntries CheckIn[] @relation("CheckInReverser")
 }
 
 // Server-side sessions (token stored in httpOnly cookie)
 model AdminSession {
   id        String   @id @default(cuid())
-  token     String   @unique
+  tokenHash String   @unique
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+// Immutable entry history. Student.checkedIn/checkinAt/checkinBy remain the
+// fast current-state projection and are updated in the same transaction.
+model CheckIn {
+  id               String        @id @default(cuid())
+  studentId        String?
+  studentKey       String
+  enteredAt        DateTime      @default(now())
+  method           CheckInMethod
+  actorUserId      String?
+  actorUsername    String?
+  revertedAt       DateTime?
+  reversedByUserId String?
+  reversalReason   String?
+
+  student    Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  actor      AdminUser? @relation("CheckInActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  reversedBy AdminUser? @relation("CheckInReverser", fields: [reversedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, enteredAt])
+  @@index([studentKey, enteredAt])
+  @@index([enteredAt])
+  @@index([revertedAt])
 }
 
 // Every verification attempt (audit trail)
@@ -52,13 +118,15 @@ model AuditLog {
   id         String   @id @default(cuid())
   rawInput   String // exactly what the visitor typed
   lookupId   String // normalized id that was searched
-  result     String // GRANTED | ALREADY_CHECKED_IN | DENIED | RATE_LIMITED
+  result     AuditResult
   studentId  String? // link to student row when found
   studentKey String? // denormalized studentId key
   actor      String? // username of the desk operator for MANUAL actions (null = self-scan)
   ipHash     String? // hashed IP for abuse tracking (no raw IP stored)
   userAgent  String?
   createdAt  DateTime @default(now())
+
+  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@index([result])
   @@index([createdAt])
@@ -67,13 +135,25 @@ model AuditLog {
 
 // Event settings + QR token (single row)
 model EventSettings {
-  id           String    @id @default(cuid())
-  eventToken   String    @unique @default(cuid()) // rotating token embedded in QR URL
-  eventName    String    @default("OBSIDIAN '26")
-  tagline      String    @default("Unfold the Unknown")
-  status       String    @default("OPEN") // OPEN | PAUSED | CLOSED — entry gate control
-  announcement String? // one-line live notice broadcast to all public screens
-  announcementExpiresAt DateTime? // when set, the announcement auto-clears at this time
-  announcementHistory String? // JSON array of recent broadcasts [{text, at}] for one-tap re-posting
-  updatedAt    DateTime  @updatedAt
+  id                    String      @id @default("primary")
+  eventToken            String      @unique @default(cuid())
+  eventName             String      @default("OBSIDIAN '26")
+  tagline               String      @default("Unfold the Unknown")
+  status                EventStatus @default(OPEN)
+  requireQrToken        Boolean     @default(false)
+  announcement          String?
+  announcementExpiresAt DateTime?
+  announcementHistory   Json        @default("[]")
+  updatedAt             DateTime    @updatedAt
+}
+
+// Shared fixed-window counters for Vercel/serverless instances.
+model RateLimitBucket {
+  keyHash     String
+  windowStart DateTime
+  count       Int      @default(1)
+  expiresAt   DateTime
+
+  @@id([keyHash, windowStart])
+  @@index([expiresAt])
 }

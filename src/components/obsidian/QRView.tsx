@@ -17,6 +17,7 @@ import {
   Lock,
   Megaphone,
   MessageCircle,
+  MonitorPlay,
   PauseCircle,
   Printer,
   QrCode,
@@ -30,6 +31,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertDialog,
@@ -128,6 +130,7 @@ export function QRView() {
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [nowTs, setNowTs] = useState<number | null>(null);
   const [suggestBusy, setSuggestBusy] = useState<string | null>(null);
+  const [settingSecurity, setSettingSecurity] = useState(false);
 
   useEffect(() => {
     setCanNativeShare(typeof navigator !== "undefined" && "share" in navigator);
@@ -199,6 +202,30 @@ export function QRView() {
       toast({ title: "Could not save announcement", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setSavingAnnouncement(false);
+    }
+  }
+
+  async function handleQrSecurity(enabled: boolean) {
+    if (!isAdmin || settingSecurity) return;
+    setSettingSecurity(true);
+    try {
+      await api.setQrSecurity(enabled);
+      await refetch();
+      await qc.invalidateQueries({ queryKey: ["qr"] });
+      toast({
+        title: enabled ? "Official QR enforcement enabled" : "Official QR enforcement disabled",
+        description: enabled
+          ? "Missing and rotated venue tokens are now blocked from self check-in."
+          : "Direct entry links can verify without a venue token.",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not update QR security",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSettingSecurity(false);
     }
   }
 
@@ -418,7 +445,7 @@ export function QRView() {
         </motion.div>
 
         {/* live announcement */}
-        <motion.div initial={{ opacity: 0, y: 14, delay: 0.05 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="obs-card rounded-2xl p-6">
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
               <Megaphone className="h-4.5 w-4.5 text-amber-300" /> Live announcement
@@ -583,7 +610,7 @@ export function QRView() {
           )}
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 14, delay: 0.08 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="obs-card rounded-2xl p-6">
           <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
             <Download className="h-4.5 w-4.5 text-purple-300" /> Download print-ready assets
           </p>
@@ -613,7 +640,7 @@ export function QRView() {
           </p>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 14, delay: 0.12 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="obs-card rounded-2xl p-6">
           <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
             <Share2 className="h-4.5 w-4.5 text-emerald-300" /> Share the entry link
           </p>
@@ -649,15 +676,43 @@ export function QRView() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 14, delay: 0.16 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="obs-card rounded-2xl p-6">
           <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
             <Shield className="h-4.5 w-4.5 text-purple-300" /> QR security — rotating event token
           </p>
           <div className="mt-4 space-y-3 text-[12px] leading-relaxed text-purple-200/60">
             <p>
               Every QR embeds a secret event token. If a screenshot gets forwarded on WhatsApp, rotate the token —
-              new scans from the old QR get flagged in the audit trail while still verifying.
+              secure mode rejects scans from the old QR and records the attempt in the audit trail.
             </p>
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-400/25 bg-amber-500/[0.06] px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-amber-100">Require the official venue QR</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-amber-200/55">
+                  When enabled, direct or stale public links cannot self check-in.
+                </p>
+              </div>
+              <Switch
+                checked={data.requireQrToken}
+                onCheckedChange={(checked) => void handleQrSecurity(checked)}
+                disabled={!isAdmin || settingSecurity}
+                aria-label="Require the current official venue QR"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(data.kioskUrl)
+                  .then(() => toast({ title: "Secure kiosk link copied" }))
+                  .catch(() => toast({ title: "Copy failed", variant: "destructive" }));
+              }}
+              className="w-full border-purple-500/30 text-purple-100 hover:bg-purple-500/10"
+            >
+              <MonitorPlay className="mr-2 h-3.5 w-3.5" /> Copy tokenized kiosk link
+            </Button>
             <div className="flex items-center justify-between rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-purple-300/60">Current token</p>
@@ -682,7 +737,7 @@ export function QRView() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 14, delay: 0.24 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-6">
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-6">
           <p className="text-sm font-semibold text-purple-100">Setup checklist</p>
           <ol className="mt-3 space-y-2.5">
             {[
@@ -710,8 +765,8 @@ export function QRView() {
               <AlertTriangle className="h-5 w-5 text-amber-400" /> Rotate event token?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-purple-200/70">
-              The old QR stops being marked valid. Students scanning a forwarded/outdated QR will still be verified, but
-              the attempt is flagged in the audit trail. You must reprint and replace the venue QR afterwards.
+              The old QR becomes invalid immediately. When official-QR enforcement is enabled, outdated scans are
+              blocked and audited. Reprint and replace the venue QR afterwards.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

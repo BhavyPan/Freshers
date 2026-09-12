@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
-import { autoMapHeaders, cellAt, readSheet } from '@/lib/sheet'
-import { normalizeStudentId } from '@/lib/normalize'
+import { autoMapHeaders, cellAt, readSheet, stageImportRows } from '@/lib/sheet'
 import type { ImportPreviewResponse } from '@/lib/types'
+import { requireSameOrigin } from '@/lib/security'
 
 const IMPORT_PERMISSION_MESSAGE = 'Only admins can import registration data'
 const DB_LOOKUP_CHUNK = 500
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
   const guard = await requireAdmin()
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
@@ -18,7 +19,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: IMPORT_PERMISSION_MESSAGE }, { status: 403 })
   }
   try {
-    await ensureSeeded()
     let form: FormData
     try {
       form = await req.formData()
@@ -40,32 +40,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { sheets, activeSheet, headers, dataRows } = parsed.data
     const autoMap = autoMapHeaders(headers)
 
-    const seenIds = new Set<string>()
-    let valid = 0
-    let missingId = 0
-    let missingName = 0
-    let duplicateIdsInFile = 0
-    for (const row of dataRows) {
-      const id = autoMap.studentId !== null ? normalizeStudentId(cellAt(row, autoMap.studentId)) : ''
-      const name = autoMap.name !== null ? cellAt(row, autoMap.name) : ''
-      const hasId = autoMap.studentId !== null && id !== ''
-      const hasName = autoMap.name !== null && name !== ''
-      let duplicate = false
-      if (hasId) {
-        if (seenIds.has(id)) {
-          duplicateIdsInFile += 1
-          duplicate = true
-        } else {
-          seenIds.add(id)
-        }
-      }
-      if (!hasId) missingId += 1
-      if (!hasName) missingName += 1
-      if (hasId && hasName && !duplicate) valid += 1
-    }
+    const staged = stageImportRows(headers, dataRows, autoMap)
 
     let existingInDb = 0
-    const candidateIds = [...seenIds]
+    const candidateIds = staged.entries.map((entry) => entry.studentId)
     for (let i = 0; i < candidateIds.length; i += DB_LOOKUP_CHUNK) {
       const chunk = candidateIds.slice(i, i + DB_LOOKUP_CHUNK)
       const found = await db.student.findMany({
@@ -87,7 +65,10 @@ export async function POST(req: Request): Promise<NextResponse> {
       rowCount: dataRows.length,
       sample,
       autoMap,
-      validation: { valid, missingId, missingName, duplicateIdsInFile, existingInDb },
+      validation: { ...staged.validation, existingInDb },
+      issues: staged.issues,
+      issuesTruncated: staged.issuesTruncated,
+      extraColumns: staged.extraColumns,
     } satisfies ImportPreviewResponse)
   } catch {
     return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })

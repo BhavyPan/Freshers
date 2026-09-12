@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
 import type { StudentRow, StudentsResponse } from '@/lib/types'
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -11,7 +10,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
     const url = new URL(req.url)
     const q = url.searchParams.get('q')?.trim() ?? ''
     const status = (url.searchParams.get('status') ?? 'ALL').trim().toUpperCase()
@@ -26,10 +24,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     const where: Prisma.StudentWhereInput = {}
     if (q) {
       where.OR = [
-        { studentId: { contains: q } },
-        { name: { contains: q } },
-        { mobile: { contains: q } },
-        { email: { contains: q } },
+        { studentId: { contains: q, mode: 'insensitive' } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { mobile: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
       ]
     }
     if (status === 'CHECKED_IN') where.checkedIn = true

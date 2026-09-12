@@ -30,7 +30,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { isSoundEnabled, playFeedback, primeAudio, setSoundEnabled } from "@/lib/feedback";
 import { readEventToken } from "@/lib/client-store";
 import { printEntryReceipt } from "@/lib/receipt";
@@ -102,6 +102,16 @@ function outcomeTheme(resp: VerifyResponse) {
         text: "text-amber-300",
         chip: "border-amber-400/50 bg-amber-500/15 text-amber-200",
         Icon: Hourglass,
+      };
+    case "QR_REQUIRED":
+      return {
+        word: "OFFICIAL QR REQUIRED",
+        sub: resp.message,
+        name: undefined,
+        glow: "rgba(251,191,36,",
+        text: "text-amber-300",
+        chip: "border-amber-400/50 bg-amber-500/15 text-amber-200",
+        Icon: ShieldX,
       };
     default:
       return {
@@ -217,7 +227,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
     setResetSecs(secs);
     try {
       window.localStorage.setItem(RESET_KEY, String(secs));
-    } catch {
+    } catch (error) {
       /* ignore */
     }
   }
@@ -227,7 +237,7 @@ export function KioskView({ onExit }: { onExit: () => void }) {
     setAutoPrint(next);
     try {
       window.localStorage.setItem(AUTOPRINT_KEY, next ? "1" : "0");
-    } catch {
+    } catch (error) {
       /* ignore */
     }
     playFeedback("tap");
@@ -266,11 +276,18 @@ export function KioskView({ onExit }: { onExit: () => void }) {
       } else if (resetSecs > 0) {
         setCountdown(resetSecs);
       }
-    } catch {
+    } catch (error) {
       // network/rate-limit — show a denial-style flash, auto-reset stays manual-ish
       setOutcome({
         key: `err-${Date.now()}`,
-        resp: { ok: false, result: "RATE_LIMITED", message: "Connection hiccup — try again." },
+        resp:
+          error instanceof ApiError && error.status === 403
+            ? { ok: false, result: "QR_REQUIRED", message: error.message, tokenValid: false }
+            : {
+                ok: false,
+                result: "RATE_LIMITED",
+                message: error instanceof ApiError ? error.message : "Connection hiccup — try again.",
+              },
         at: new Date(),
       });
       playFeedback("denied");

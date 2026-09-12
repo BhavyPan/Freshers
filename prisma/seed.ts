@@ -1,8 +1,8 @@
 import { db } from '../src/lib/db'
-import { runSeed } from '../src/lib/seed'
+import { seedDemoData } from '../src/lib/seed'
 
 async function main(): Promise<void> {
-  await runSeed()
+  await seedDemoData()
   const students = await db.student.count()
   const checkedIn = await db.student.count({ where: { checkedIn: true } })
   const admins = await db.adminUser.count()

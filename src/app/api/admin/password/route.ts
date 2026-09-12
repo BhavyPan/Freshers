@@ -1,9 +1,12 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { hashPassword, requireAdmin, verifyPassword, SESSION_COOKIE } from '@/lib/auth'
+import { hashPassword, requireAdmin, sessionTokenHash, verifyPassword, SESSION_COOKIE } from '@/lib/auth'
+import { requireSameOrigin } from '@/lib/security'
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
   const guard = await requireAdmin()
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
@@ -25,9 +28,9 @@ export async function POST(req: Request): Promise<NextResponse> {
         { status: 400 }
       )
     }
-    if (newPassword.length < 8) {
+    if (newPassword.length < 12) {
       return NextResponse.json(
-        { ok: false, message: 'New password must be at least 8 characters' },
+        { ok: false, message: 'New password must be at least 12 characters' },
         { status: 400 }
       )
     }
@@ -44,7 +47,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const currentToken = store.get(SESSION_COOKIE)?.value
     await db.adminSession.deleteMany({
       where: currentToken
-        ? { userId: user.id, NOT: { token: currentToken } }
+        ? { userId: user.id, NOT: { tokenHash: sessionTokenHash(currentToken) } }
         : { userId: user.id },
     })
 

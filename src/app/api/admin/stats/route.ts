@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
 import type { StatsResponse } from '@/lib/types'
 
 const BUCKET_MS = 15 * 60 * 1000
@@ -15,7 +14,6 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
 
     const [totalRegistered, checkedIn, deniedAttempts, lastCheckinRow, distinctDepts, byDeptTotal, byDeptChecked, grantedLogs, recentRows] =
       await Promise.all([

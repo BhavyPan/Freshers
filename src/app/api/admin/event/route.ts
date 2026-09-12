@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { buildAnnouncementHistory, getEventSettings, parseAnnouncementHistory } from '@/lib/qr'
 import type { EventStatus, EventStatusResponse } from '@/lib/types'
+import { requireSameOrigin } from '@/lib/security'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +24,7 @@ export async function GET(): Promise<NextResponse> {
     status,
     eventName: settings.eventName,
     tagline: settings.tagline,
+    requireQrToken: settings.requireQrToken,
     announcement: settings.announcement ?? null,
     announcementExpiresAt: settings.announcementExpiresAt
       ? settings.announcementExpiresAt.toISOString()
@@ -33,6 +36,8 @@ export async function GET(): Promise<NextResponse> {
 
 /** PATCH the gate status and/or live announcement — admins only. */
 export async function PATCH(req: Request): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return NextResponse.json({ ok: false, message: origin.message }, { status: origin.status })
   const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
@@ -42,13 +47,10 @@ export async function PATCH(req: Request): Promise<NextResponse> {
       status?: unknown
       announcement?: unknown
       expiresInMinutes?: unknown
+      requireQrToken?: unknown
     }
     const settings = await getEventSettings()
-    const data: {
-      status?: string
-      announcement?: string | null
-      announcementExpiresAt?: Date | null
-    } = {}
+    const data: Prisma.EventSettingsUpdateInput = {}
 
     if (body?.status !== undefined) {
       const requested = String(body.status ?? '').toUpperCase() as EventStatus
@@ -59,6 +61,16 @@ export async function PATCH(req: Request): Promise<NextResponse> {
         )
       }
       data.status = requested
+    }
+
+    if (body?.requireQrToken !== undefined) {
+      if (typeof body.requireQrToken !== 'boolean') {
+        return NextResponse.json(
+          { ok: false, message: 'requireQrToken must be a boolean.' },
+          { status: 400 }
+        )
+      }
+      data.requireQrToken = body.requireQrToken
     }
 
     let clearsAnnouncement = false
@@ -118,6 +130,7 @@ export async function PATCH(req: Request): Promise<NextResponse> {
       status,
       eventName: updated.eventName,
       tagline: updated.tagline,
+      requireQrToken: updated.requireQrToken,
       announcement: updated.announcement ?? null,
       announcementExpiresAt: updated.announcementExpiresAt
         ? updated.announcementExpiresAt.toISOString()

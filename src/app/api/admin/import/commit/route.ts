@@ -1,24 +1,18 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
-import { cellAt, isValidMapping, readSheet } from '@/lib/sheet'
-import { normalizeStudentId } from '@/lib/normalize'
-import type { ImportCommitResponse, ImportMapping } from '@/lib/types'
+import { isValidMapping, readSheet, stageImportRows, type StagedImportEntry } from '@/lib/sheet'
+import type { ImportCommitResponse, ImportIssue, ImportMapping } from '@/lib/types'
+import { requireSameOrigin } from '@/lib/security'
 
 const IMPORT_PERMISSION_MESSAGE = 'Only admins can import registration data'
-const DB_LOOKUP_CHUNK = 500
 
-interface ImportEntry {
-  studentId: string
-  name: string
-  mobile: string
-  department: string
-  email: string
-  year: string
-}
-
-function failure(message: string, status: number): NextResponse {
+function failure(
+  message: string,
+  status: number,
+  issues: ImportIssue[] = [],
+  issuesTruncated = false
+): NextResponse {
   const body: ImportCommitResponse = {
     ok: false,
     inserted: 0,
@@ -27,20 +21,32 @@ function failure(message: string, status: number): NextResponse {
     deletedAll: false,
     totalInDb: 0,
     message,
+    issues,
+    issuesTruncated,
   }
   return NextResponse.json(body, { status })
 }
 
+function studentData(entry: StagedImportEntry) {
+  return {
+    name: entry.name,
+    mobile: entry.mobile || null,
+    department: entry.department || null,
+    email: entry.email || null,
+    year: entry.year || null,
+    extraData: entry.extraData,
+  }
+}
+
 export async function POST(req: Request): Promise<NextResponse> {
+  const origin = requireSameOrigin(req)
+  if (!origin.ok) return failure(origin.message, origin.status)
+
   const guard = await requireAdmin()
-  if (!guard.ok) {
-    return failure(guard.message, guard.status)
-  }
-  if (guard.user.role !== 'ADMIN') {
-    return failure(IMPORT_PERMISSION_MESSAGE, 403)
-  }
+  if (!guard.ok) return failure(guard.message, guard.status)
+  if (guard.user.role !== 'ADMIN') return failure(IMPORT_PERMISSION_MESSAGE, 403)
+
   try {
-    await ensureSeeded()
     let form: FormData
     try {
       form = await req.formData()
@@ -49,17 +55,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const file = form.get('file')
-    if (!(file instanceof File) || file.size === 0) {
-      return failure('No file uploaded', 400)
-    }
+    if (!(file instanceof File) || file.size === 0) return failure('No file uploaded', 400)
     const sheetValue = form.get('sheet')
     const requestedSheet = typeof sheetValue === 'string' && sheetValue !== '' ? sheetValue : null
-
     const parsed = await readSheet(file, requestedSheet)
-    if (!parsed.ok) {
-      return failure(parsed.message, 400)
-    }
-    const { dataRows } = parsed.data
+    if (!parsed.ok) return failure(parsed.message, 400)
 
     let mapping: unknown = null
     const mappingValue = form.get('mapping')
@@ -73,109 +73,81 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (!isValidMapping(mapping)) {
       return failure('Column mapping must include the Student ID and Name columns', 400)
     }
-    const columnMap: ImportMapping = mapping
+
+    const staged = stageImportRows(parsed.data.headers, parsed.data.dataRows, mapping as ImportMapping)
+    if (staged.entries.length === 0) {
+      return failure(
+        'No valid student rows were found; the registry was not changed.',
+        400,
+        staged.issues,
+        staged.issuesTruncated
+      )
+    }
+
     const mode = form.get('mode') === 'REPLACE' ? 'REPLACE' : 'MERGE'
+    const skipped = parsed.data.dataRows.length - staged.entries.length
+    const result = await db.$transaction(
+      async (tx) => {
+        let inserted = 0
+        let updated = 0
+        let deletedAll = false
 
-    const entries: ImportEntry[] = []
-    let skipped = 0
-    for (const row of dataRows) {
-      const studentId = normalizeStudentId(cellAt(row, columnMap.studentId))
-      const name = cellAt(row, columnMap.name)
-      if (!studentId || !name) {
-        skipped += 1
-        continue
-      }
-      entries.push({
-        studentId,
-        name,
-        mobile: cellAt(row, columnMap.mobile),
-        department: cellAt(row, columnMap.department),
-        email: cellAt(row, columnMap.email),
-        year: cellAt(row, columnMap.year),
-      })
-    }
-
-    const existingIds = new Set<string>()
-    const uniqueIds = [...new Set(entries.map((entry) => entry.studentId))]
-    for (let i = 0; i < uniqueIds.length; i += DB_LOOKUP_CHUNK) {
-      const chunk = uniqueIds.slice(i, i + DB_LOOKUP_CHUNK)
-      const found = await db.student.findMany({
-        where: { studentId: { in: chunk } },
-        select: { studentId: true },
-      })
-      for (const row of found) existingIds.add(row.studentId)
-    }
-
-    let deletedAll = false
-    if (mode === 'REPLACE') {
-      await db.student.deleteMany({})
-      deletedAll = true
-      existingIds.clear()
-    }
-
-    let inserted = 0
-    let updated = 0
-    const seenInFile = new Set<string>()
-    for (const entry of entries) {
-      const exists = existingIds.has(entry.studentId) || seenInFile.has(entry.studentId)
-      if (!exists) {
-        try {
-          await db.student.create({
-            data: {
+        if (mode === 'REPLACE') {
+          await tx.student.deleteMany({})
+          await tx.student.createMany({
+            data: staged.entries.map((entry) => ({
               studentId: entry.studentId,
-              name: entry.name,
-              mobile: entry.mobile || null,
-              department: entry.department || null,
-              email: entry.email || null,
-              year: entry.year || null,
-            },
+              ...studentData(entry),
+            })),
           })
-          inserted += 1
-        } catch {
-          await db.student.update({
-            where: { studentId: entry.studentId },
-            data: {
-              name: entry.name,
-              mobile: entry.mobile || undefined,
-              department: entry.department || undefined,
-              email: entry.email || undefined,
-              year: entry.year || undefined,
-            },
-          })
-          updated += 1
+          inserted = staged.entries.length
+          deletedAll = true
+        } else {
+          const ids = staged.entries.map((entry) => entry.studentId)
+          const existing = new Set(
+            (
+              await tx.student.findMany({
+                where: { studentId: { in: ids } },
+                select: { studentId: true },
+              })
+            ).map((row) => row.studentId)
+          )
+          for (const entry of staged.entries) {
+            await tx.student.upsert({
+              where: { studentId: entry.studentId },
+              update: studentData(entry),
+              create: { studentId: entry.studentId, ...studentData(entry) },
+            })
+            if (existing.has(entry.studentId)) updated += 1
+            else inserted += 1
+          }
         }
-      } else {
-        await db.student.update({
-          where: { studentId: entry.studentId },
-          data: {
-            name: entry.name,
-            mobile: entry.mobile || undefined,
-            department: entry.department || undefined,
-            email: entry.email || undefined,
-            year: entry.year || undefined,
-          },
-        })
-        updated += 1
-      }
-      seenInFile.add(entry.studentId)
-    }
 
-    const totalInDb = await db.student.count()
+        return { inserted, updated, deletedAll, totalInDb: await tx.student.count() }
+      },
+      { maxWait: 10_000, timeout: 60_000 }
+    )
+
     const summary =
-      `Import complete — ${inserted} student${inserted === 1 ? '' : 's'} added, ` +
-      `${updated} updated, ${skipped} row${skipped === 1 ? '' : 's'} skipped` +
-      (deletedAll ? ', previous registry replaced' : '')
+      'Import complete - ' +
+      result.inserted +
+      ' added, ' +
+      result.updated +
+      ' updated, ' +
+      skipped +
+      ' skipped' +
+      (result.deletedAll ? ', previous registry replaced' : '')
 
     return NextResponse.json({
       ok: true,
-      inserted,
-      updated,
+      ...result,
       skipped,
-      deletedAll,
-      totalInDb,
       message: summary,
+      issues: staged.issues,
+      issuesTruncated: staged.issuesTruncated,
     } satisfies ImportCommitResponse)
-  } catch {
-    return failure('Server error while importing', 500)
+  } catch (error) {
+    console.error('[import] transaction failed:', error)
+    return failure('Server error while importing; no partial changes were saved.', 500)
   }
 }

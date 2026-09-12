@@ -10,7 +10,9 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
   try {
     const settings = await getEventSettings()
-    const url = `${getBaseUrl(req)}/?t=${settings.eventToken}`
+    const baseUrl = getBaseUrl(req)
+    const url = baseUrl + '/?t=' + settings.eventToken
+    const kioskUrl = baseUrl + '/?t=' + settings.eventToken + '#/kiosk'
     const dataUrl = await qrDataUrl(url, 512)
     const status: EventStatus =
       settings.status === 'PAUSED' ? 'PAUSED' : settings.status === 'CLOSED' ? 'CLOSED' : 'OPEN'
@@ -21,6 +23,8 @@ export async function GET(req: Request): Promise<NextResponse> {
       url,
       qrDataUrl: dataUrl,
       generatedAt: new Date().toISOString(),
+      requireQrToken: settings.requireQrToken,
+      kioskUrl,
       announcement: settings.announcement ?? null,
       announcementExpiresAt: settings.announcementExpiresAt
         ? settings.announcementExpiresAt.toISOString()

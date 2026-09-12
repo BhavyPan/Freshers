@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
 import { getBaseUrl } from '@/lib/qr'
 import QRCode from 'qrcode'
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib'
@@ -42,7 +41,6 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
     const url = new URL(req.url)
     const scopeParam = (url.searchParams.get('scope') ?? 'notarrived').trim()
     const scope: Scope = (SCOPES as readonly string[]).includes(scopeParam)
@@ -132,7 +130,6 @@ export async function GET(req: Request): Promise<Response> {
           height: cardH,
           borderColor: line,
           borderWidth: 1,
-          borderRadius: 8,
         })
         page.drawRectangle({
           x,
@@ -140,7 +137,6 @@ export async function GET(req: Request): Promise<Response> {
           width: cardW,
           height: 6,
           color: purple,
-          borderRadius: 8,
         })
 
         // QR (personal invite link)
@@ -163,7 +159,6 @@ export async function GET(req: Request): Promise<Response> {
           y: y + (cardH - qrSize) / 2 - 4,
           width: qrSize,
           height: qrSize,
-          borderRadius: 4,
           borderWidth: 0.8,
           borderColor: line,
         })

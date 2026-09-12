@@ -107,6 +107,7 @@ const RESULT_TONES: Record<string, string> = {
   DENIED: "border-rose-400/40 bg-rose-500/10 text-rose-300",
   RATE_LIMITED: "border-purple-400/30 bg-purple-500/10 text-purple-200",
   EVENT_CLOSED: "border-amber-400/40 bg-amber-500/10 text-amber-200",
+  TOKEN_REJECTED: "border-amber-400/40 bg-amber-500/10 text-amber-200",
   LOOKUP_FOUND: "border-teal-400/30 bg-teal-500/10 text-teal-300",
   LOOKUP_NONE: "border-slate-400/30 bg-slate-500/10 text-slate-300",
 };
@@ -124,6 +125,7 @@ const DIGEST_LABELS: Record<string, string> = {
   DENIED: "Denied",
   RATE_LIMITED: "Rate limited",
   EVENT_CLOSED: "Gate closed",
+  TOKEN_REJECTED: "Outdated QR",
   UNCHECKED: "Reversals",
   EDITED: "Edits",
   DELETED: "Deletions",
@@ -716,6 +718,7 @@ export function ReportsView() {
               <SelectItem value="DENIED">Denied</SelectItem>
               <SelectItem value="RATE_LIMITED">Rate limited</SelectItem>
               <SelectItem value="EVENT_CLOSED">Gate paused/closed</SelectItem>
+              <SelectItem value="TOKEN_REJECTED">Outdated/missing QR</SelectItem>
               <SelectItem value="LOOKUPS">ID lookups (any)</SelectItem>
             </SelectContent>
           </Select>

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { ensureSeeded } from '@/lib/seed'
 import type { AuditResponse, AuditRow } from '@/lib/types'
 
 const RESULT_VALUES = [
@@ -11,6 +10,7 @@ const RESULT_VALUES = [
   'DENIED',
   'RATE_LIMITED',
   'EVENT_CLOSED',
+  'TOKEN_REJECTED',
   'UNCHECKED',
   'DELETED',
   'EDITED',
@@ -29,7 +29,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    await ensureSeeded()
     const url = new URL(req.url)
     const q = url.searchParams.get('q')?.trim() ?? ''
     const resultParam = (url.searchParams.get('result') ?? 'ALL').trim()
@@ -43,10 +42,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     const where: Prisma.AuditLogWhereInput = {}
     if (q) {
       where.OR = [
-        { rawInput: { contains: q } },
-        { lookupId: { contains: q } },
-        { studentKey: { contains: q } },
-        { actor: { contains: q } },
+        { rawInput: { contains: q, mode: 'insensitive' } },
+        { lookupId: { contains: q, mode: 'insensitive' } },
+        { studentKey: { contains: q, mode: 'insensitive' } },
+        { actor: { contains: q, mode: 'insensitive' } },
       ]
     }
     if (resultParam.toUpperCase() !== 'ALL' && resultParam !== '') {
@@ -54,7 +53,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         .split(',')
         .map((value) => value.trim().toUpperCase())
         .flatMap((value) => RESULT_ALIASES[value] ?? (RESULT_VALUES.includes(value) ? [value] : []))
-      if (results.length > 0) where.result = { in: results }
+      if (results.length > 0) where.result = { in: results as Prisma.EnumAuditResultFilter['in'] }
     }
     if (studentKey) where.studentKey = studentKey
 

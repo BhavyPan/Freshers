@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { normalizeStudentId, isValidStudentId } from '@/lib/normalize'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
-import { ensureSeeded } from '@/lib/seed'
 import { getEventSettings } from '@/lib/qr'
 import type { EventStatus, EntryStatusResponse } from '@/lib/types'
 
@@ -18,7 +17,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: Request): Promise<NextResponse> {
   try {
     const ip = getClientIp(req)
-    const rateLimit = checkRateLimit(`status:${ip}`, 30, 60_000)
+    const rateLimit = await checkRateLimit(`status:${ip}`, 30, 60_000)
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { ok: false, found: false, message: 'Too many requests — slow down a little.' } satisfies EntryStatusResponse,
@@ -34,7 +33,6 @@ export async function GET(req: Request): Promise<NextResponse> {
       )
     }
 
-    await ensureSeeded()
     const [settings, student] = await Promise.all([
       getEventSettings(),
       db.student.findUnique({
