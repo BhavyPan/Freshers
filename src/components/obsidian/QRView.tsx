@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -14,12 +14,14 @@ import {
   Loader2,
   Lock,
   Megaphone,
+  MessageCircle,
   PauseCircle,
   Printer,
   QrCode,
   Radio,
   RefreshCw,
   ScanLine,
+  Share2,
   Shield,
   Trash2,
 } from "lucide-react";
@@ -42,6 +44,30 @@ import type { EventStatus } from "@/lib/types";
 import { EventStatusBadge } from "./EventStatusBadge";
 import { cn } from "@/lib/utils";
 
+/** One-tap announcement drafts for frantic event moments. */
+const ANNOUNCEMENT_PRESETS: { icon: string; label: string; text: string }[] = [
+  {
+    icon: "🚪",
+    label: "Doors open",
+    text: "Doors are fully open — come straight in, juniors! Entry takes under 30 seconds.",
+  },
+  {
+    icon: "↗️",
+    label: "Line moved",
+    text: "The entry line has moved to Gate B — follow the purple flags.",
+  },
+  {
+    icon: "🎓",
+    label: "ID reminder",
+    text: "Keep your college ID handy — you'll need your Student ID at the verification screen.",
+  },
+  {
+    icon: "🎪",
+    label: "Stage call",
+    text: "Opening ceremony starts in 10 minutes at the main stage — head inside now!",
+  },
+];
+
 export function QRView() {
   const admin = useObsidianStore((s) => s.admin);
   const isAdmin = admin?.role === "ADMIN";
@@ -54,6 +80,11 @@ export function QRView() {
   const [settingStatus, setSettingStatus] = useState<EventStatus | null>(null);
   const [announcementDraft, setAnnouncementDraft] = useState<string | null>(null);
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+  const [canNativeShare, setCanNativeShare] = useState(false);
+
+  useEffect(() => {
+    setCanNativeShare(typeof navigator !== "undefined" && "share" in navigator);
+  }, []);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["qr"],
@@ -124,6 +155,36 @@ export function QRView() {
       .writeText(data.url)
       .then(() => toast({ title: "URL copied", description: data.url }))
       .catch(() => toast({ title: "Copy failed", description: "Long-press the URL to copy manually.", variant: "destructive" }));
+  }
+
+  function inviteText(url: string) {
+    return `\u{1F30C} OBSIDIAN '26 — Unfold the Unknown\n\nFreshers 2K26 smart entry portal:\n${url}\n\nScan the venue QR or open the link, enter your Student ID, and you're in. See you at the door! \u2728`;
+  }
+
+  function shareWhatsApp() {
+    if (!data?.url) return;
+    window.open(`https://wa.me/?text=${encodeURIComponent(inviteText(data.url))}`, "_blank", "noopener");
+  }
+
+  async function nativeShare() {
+    if (!data?.url) return;
+    try {
+      await navigator.share({
+        title: "OBSIDIAN '26 — Smart QR Entry",
+        text: `OBSIDIAN '26 Freshers 2K26 — check in here:`,
+        url: data.url,
+      });
+    } catch {
+      /* user dismissed — ignore */
+    }
+  }
+
+  function copyInvite() {
+    if (!data?.url) return;
+    navigator.clipboard
+      .writeText(inviteText(data.url))
+      .then(() => toast({ title: "Invite copied", description: "Paste it into any WhatsApp group or DM." }))
+      .catch(() => toast({ title: "Copy failed", description: "Try again or copy the URL instead.", variant: "destructive" }));
   }
 
   if (isLoading || !data) {
@@ -264,6 +325,20 @@ export function QRView() {
 
           {isAdmin ? (
             <div className="mt-4 space-y-2.5">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick announcement presets">
+                {ANNOUNCEMENT_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setAnnouncementDraft(p.text)}
+                    disabled={savingAnnouncement}
+                    title={p.text}
+                    className="rounded-full border border-purple-500/25 bg-purple-500/8 px-3 py-1 text-[10px] font-semibold text-purple-200/75 transition-all hover:border-amber-300/50 hover:bg-amber-500/10 hover:text-amber-200 disabled:opacity-50"
+                  >
+                    {p.icon} {p.label}
+                  </button>
+                ))}
+              </div>
               <textarea
                 value={announcementDraft ?? data.announcement ?? ""}
                 onChange={(e) => setAnnouncementDraft(e.target.value)}
@@ -343,6 +418,42 @@ export function QRView() {
             The PDF poster includes OBSIDIAN &apos;26 branding and the entry URL — print it, stick it at the venue entrance,
             and juniors are one scan away.
           </p>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 14, delay: 0.12 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+          <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+            <Share2 className="h-4.5 w-4.5 text-emerald-300" /> Share the entry link
+          </p>
+          <p className="mt-3 text-[12px] leading-relaxed text-purple-200/55">
+            Blast the portal to class groups before the doors open — juniors who pre-open the link breeze through at the desk.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            <Button
+              onClick={shareWhatsApp}
+              className="obs-glow-btn h-11 flex-1 rounded-xl border border-emerald-400/40 bg-emerald-600/90 text-sm font-semibold text-white hover:bg-emerald-500 sm:flex-none sm:px-6"
+            >
+              <MessageCircle className="mr-2 h-4.5 w-4.5" />
+              WhatsApp
+            </Button>
+            {canNativeShare && (
+              <Button
+                onClick={nativeShare}
+                variant="outline"
+                className="h-11 flex-1 rounded-xl border-purple-500/35 text-sm font-semibold text-purple-100 hover:bg-purple-500/15 sm:flex-none sm:px-6"
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                More…
+              </Button>
+            )}
+            <Button
+              onClick={copyInvite}
+              variant="outline"
+              className="h-11 flex-1 rounded-xl border-purple-500/35 text-sm font-semibold text-purple-100 hover:bg-purple-500/15 sm:flex-none sm:px-6"
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copy invite
+            </Button>
+          </div>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 14, delay: 0.16 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">

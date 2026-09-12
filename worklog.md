@@ -121,3 +121,35 @@ Stage Summary:
 - System now has 8 major features beyond spec (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, live announcements + analytics)
 - One announcement is intentionally left LIVE for demo; clear it via Event QR Code → Live announcement → Clear
 - Risks: none known. Next round ideas: entry-desk kiosk mode (fullscreen auto-focus verify loop), WhatsApp share card for event QR, student search keyboard nav, CSV round-trip test.
+
+---
+Task ID: 5 (cron webDevReview round 3)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + Entry Kiosk mode + QR share + registry keyboard nav + polish
+
+Work Log:
+QA & status:
+- Full browser QA (agent-browser, desktop 1280 + mobile 390): landing, verify→GRANTED flow, all 4 admin sections — zero console errors on every route (only harmless THREE.Clock deprecation warning). System stable → chose feature development over fixes.
+
+New features:
+1. ENTRY-DESK KIOSK MODE (flagship, #/kiosk): new KioskView + route — giant "SHOW YOUR PASS" gradient typography, always-focused huge input (USB scanner-wedge friendly: scanner types + Enter), outcome screens ACCESS GRANTED / ALREADY INSIDE / ACCESS DENIED / ENTRY PAUSED with per-outcome ambient radial wash + glow, WebAudio chime + haptic per outcome, auto-reset countdown (3/5/8s/manual, persisted in localStorage) with draining progress bar, any-keystroke-or-tap instant reset, fullscreen toggle, session activity chip strip (last 7, local), live counter + clock + gate-status badge + announcement banner, sound mute. Entries: Landing footer "Kiosk Mode" link + AdminShell sidebar "Entry Kiosk" (opens new tab, desktop + mobile sheet). Verified: granted (Aryan OBS26-017), denied (OBS26-XXX), auto-reset loop, mobile 390px layout.
+2. QR SHARE CARD: "Share the entry link" on QR page — WhatsApp (wa.me pre-filled branded invite), native share (mobile, feature-detected), copy-invite-to-clipboard.
+3. REGISTRY KEYBOARD NAV: ↑/↓ rows with purple highlight + glowing inset + scrollIntoView, Enter = manual check-in (or "already checked in" toast + chime if done), Esc clears; kbd hint chips (↑↓ ↵ esc) in table footer via new .obs-kbd style; guards: ignores keys in inputs/dialogs.
+4. ANNOUNCEMENT PRESETS: 4 one-tap chips (Doors open / Line moved / ID reminder / Stage call) in QR announcement editor; round-trip verified preset → broadcast → pulse API → kiosk banner shows new text.
+5. DASHBOARD ANIMATED KPIs: AnimatedNumber (blur-slide pop on value change) makes the 4s live polling visible.
+
+Bug fixes:
+- Kiosk default auto-reset showed MANUAL instead of 5s: Number(null)=0 collided with the "0=manual" option — now defaults to 5s when unset.
+- RegistryView: removed side-effects from setState updater (StrictMode double-invoke hazard) by splitting Enter-to-check-in into its own effect using runActionRef.
+
+Styling details:
+- .obs-kbd chip (bordered key cap, purple glass); kiosk giant display type + radial outcome washes; preset chips with amber hover; animated numbers with blur transition.
+
+Verification:
+- bun run lint PASS · all 7 routes console-error-free · kiosk granted/denied/auto-reset verified on desktop + mobile · preset broadcast round-trip via pulse API · registry Enter toast verified.
+- Note: QA added real audit entries (OBS26-017/018 granted, OBS26-XXX denied) — legitimate event data, left in place. Announcement left LIVE: "Opening ceremony starts in 10 minutes…" (clear via Event QR Code → Clear if unwanted).
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 11 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, live announcements + analytics, kiosk mode, QR share, keyboard nav).
+- Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk is public at #/kiosk (no login needed by design — door tablets).
+- Risks: none known. Next-round ideas: kiosk idle "attract" animation after 60s, WhatsApp QR image share via canvas blob on mobile, student profile drawer with per-student audit history, audit CSV scheduled digest, e-invite PDF generator per student.

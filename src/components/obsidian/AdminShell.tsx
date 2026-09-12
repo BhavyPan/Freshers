@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import {
   ClipboardList,
+  ExternalLink,
   KeyRound,
   LayoutDashboard,
   Loader2,
   LogOut,
   Menu,
+  MonitorPlay,
   QrCode,
   Settings,
   Users,
@@ -107,6 +109,25 @@ function NavList({
         );
       })}
     </nav>
+  );
+}
+
+function KioskLaunch({ compact }: { compact?: boolean }) {
+  return (
+    <a
+      href="#/kiosk"
+      target="_blank"
+      rel="noopener"
+      title="Open the door-table kiosk screen in a new tab"
+      className={cn(
+        "group flex items-center gap-2.5 rounded-xl border border-purple-500/25 bg-purple-500/5 px-3.5 py-2.5 text-sm font-medium text-purple-200/70 transition-all hover:border-purple-400/50 hover:bg-purple-500/10 hover:text-purple-100",
+        compact && "mt-5"
+      )}
+    >
+      <MonitorPlay className="h-4.5 w-4.5 text-purple-300/70 transition-transform group-hover:scale-110" />
+      Entry Kiosk
+      <ExternalLink className="ml-auto h-3.5 w-3.5 text-purple-300/40" />
+    </a>
   );
 }
 
@@ -334,6 +355,7 @@ export function AdminShell({
             <SheetTitle className="sr-only">Admin navigation</SheetTitle>
             <ObsidianLogo size="sm" className="mb-6" />
             <NavList items={nav} section={section} onNavigate={onNavigate} onPick={() => setMobileOpen(false)} />
+            <KioskLaunch compact />
             <div className="mt-6">
               <UserChip admin={admin} loggingOut={loggingOut} onLogout={handleLogout} />
             </div>
@@ -346,6 +368,7 @@ export function AdminShell({
         <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r border-purple-500/15 bg-[#080512]/80 p-5 backdrop-blur-lg md:flex">
           <ObsidianLogo size="md" className="mb-8" />
           <NavList items={nav} section={section} onNavigate={onNavigate} />
+          <KioskLaunch />
           <div className="mt-auto pt-6">
             <UserChip admin={admin} loggingOut={loggingOut} onLogout={handleLogout} />
           </div>

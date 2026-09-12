@@ -3,7 +3,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, ScanLine, ShieldCheck, Users, Zap } from "lucide-react";
+import { ChevronRight, MonitorPlay, ScanLine, ShieldCheck, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { ObsidianLogo } from "./ObsidianLogo";
@@ -183,12 +183,22 @@ export function Landing({ onBegin }: { onBegin: () => void }) {
       {/* bottom bar */}
       <div className="relative z-10 flex items-center justify-between border-t border-purple-500/15 bg-[#06030c]/70 px-5 py-4 backdrop-blur-md">
         <ObsidianLogo size="sm" />
-        <a
-          href="#/admin"
-          className="flex items-center gap-1.5 rounded-full border border-purple-500/25 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-purple-200/70 transition-colors hover:border-purple-400/60 hover:text-purple-100"
-        >
-          Organizer Login
-        </a>
+        <div className="flex items-center gap-2.5">
+          <a
+            href="#/kiosk"
+            title="Fullscreen auto-reset verify loop for the door table"
+            className="flex items-center gap-1.5 rounded-full border border-purple-500/25 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-purple-200/70 transition-colors hover:border-purple-400/60 hover:text-purple-100"
+          >
+            <MonitorPlay className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Kiosk Mode</span>
+          </a>
+          <a
+            href="#/admin"
+            className="flex items-center gap-1.5 rounded-full border border-purple-500/25 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-purple-200/70 transition-colors hover:border-purple-400/60 hover:text-purple-100"
+          >
+            Organizer Login
+          </a>
+        </div>
       </div>
     </div>
   );

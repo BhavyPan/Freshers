@@ -9,6 +9,7 @@ import { ContourBackground } from "./ContourBackground";
 import { Landing } from "./Landing";
 import { VerifyView } from "./VerifyView";
 import { ResultView } from "./ResultView";
+import { KioskView } from "./KioskView";
 import { AdminLogin } from "./AdminLogin";
 import { AdminShell, type AdminSection } from "./AdminShell";
 import { DashboardView } from "./DashboardView";
@@ -102,6 +103,9 @@ function PublicArea({ route, navigate }: { route: Extract<AppRoute, { area: "pub
     if (route.step === "verify") clearVerify();
   }, [route.step, clearVerify]);
 
+  if (route.step === "kiosk") {
+    return <KioskView onExit={() => navigate("#/")} />;
+  }
   if (route.step === "verify") {
     return <VerifyView onResult={() => navigate("#/result")} onBack={() => navigate("#/")} />;
   }

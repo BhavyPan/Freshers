@@ -38,6 +38,23 @@ function timeAgo(iso: string) {
   }
 }
 
+function AnimatedNumber({ value }: { value: number | string }) {
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.span
+        key={String(value)}
+        initial={{ opacity: 0, y: -10, filter: "blur(3px)" }}
+        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+        exit={{ opacity: 0, y: 10, filter: "blur(3px)" }}
+        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+        className="inline-block tabular-nums"
+      >
+        {value}
+      </motion.span>
+    </AnimatePresence>
+  );
+}
+
 function KpiCard({
   icon: Icon,
   label,
@@ -87,7 +104,9 @@ function KpiCard({
           </span>
         )}
       </div>
-      <p className="font-display mt-4 text-3xl font-black tabular-nums text-purple-50">{value}</p>
+      <p className="font-display mt-4 text-3xl font-black text-purple-50">
+        <AnimatedNumber value={value} />
+      </p>
       <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-200/60">{label}</p>
     </motion.div>
   );

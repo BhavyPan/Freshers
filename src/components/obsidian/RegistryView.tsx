@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -60,6 +60,8 @@ export function RegistryView() {
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [quickId, setQuickId] = useState("");
+  const [highlighted, setHighlighted] = useState<number | null>(null);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
   // debounce search
   useMemo(() => {
@@ -120,6 +122,88 @@ export function RegistryView() {
 
   const students = data?.students ?? [];
   const totalPages = data?.totalPages ?? 1;
+
+  // clear keyboard highlight whenever the result set changes
+  useEffect(() => {
+    setHighlighted(null);
+  }, [debouncedQ, status, dept, sort, page, tab]);
+
+  // keep the highlighted row in view
+  useEffect(() => {
+    if (highlighted === null) return;
+    const s = students[highlighted];
+    if (!s) return;
+    rowRefs.current.get(s.id)?.scrollIntoView({ block: "nearest" });
+  }, [highlighted, students]);
+
+  const runActionRef = useRef(runAction);
+  runActionRef.current = runAction;
+
+  // keyboard navigation: ↑/↓ move · Enter = manual check-in · Esc clears
+  useEffect(() => {
+    if (tab !== "students") return;
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector("[role='dialog']")) return;
+      const list = data?.students ?? [];
+      if (list.length === 0) return;
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlighted((h) => {
+          const base = h === null ? (e.key === "ArrowDown" ? -1 : 0) : h;
+          const next = e.key === "ArrowDown" ? Math.min(base + 1, list.length - 1) : Math.max(base - 1, 0);
+          return next;
+        });
+      } else if (e.key === "Escape") {
+        setHighlighted(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, data]);
+
+  // Enter-to-check-in lives in its own effect so it always sees fresh state
+  useEffect(() => {
+    if (tab !== "students") return;
+    if (highlighted === null) return;
+    function onEnter(e: KeyboardEvent) {
+      if (e.key !== "Enter") return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector("[role='dialog']")) return;
+      const s = data?.students[highlighted as number];
+      if (!s) return;
+      if (s.checkedIn) {
+        playFeedback("already");
+        toast({
+          title: `${s.name} is already checked in`,
+          description: `${s.studentId} · ${timeFmt(s.checkinAt)}`,
+        });
+      } else {
+        void runActionRef.current(s.id, "checkin");
+      }
+    }
+    window.addEventListener("keydown", onEnter);
+    return () => window.removeEventListener("keydown", onEnter);
+  }, [tab, highlighted, data, toast]);
 
   const quickCheckin = useMutation({
     mutationFn: (id: string) => api.quickCheckin(id),
@@ -325,12 +409,21 @@ export function RegistryView() {
                       </td>
                     </tr>
                   ) : (
-                    students.map((s) => (
+                    students.map((s, i) => (
                       <motion.tr
                         key={s.id}
+                        ref={(el) => {
+                          if (el) rowRefs.current.set(s.id, el);
+                          else rowRefs.current.delete(s.id);
+                        }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="obs-row-hover border-b border-purple-500/10"
+                        className={cn(
+                          "obs-row-hover border-b border-purple-500/10",
+                          highlighted === i &&
+                            "bg-purple-500/[0.13] shadow-[inset_3px_0_0_rgba(168,85,247,0.9)]"
+                        )}
+                        data-kbd-highlight={highlighted === i ? "true" : undefined}
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
@@ -439,9 +532,15 @@ export function RegistryView() {
             </div>
 
             {/* pagination */}
-            <div className="flex items-center justify-between border-t border-purple-500/15 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-t border-purple-500/15 px-4 py-3">
               <p className="text-xs text-purple-200/50">
                 {data ? `${(data.page - 1) * data.pageSize + (data.students.length || 0)} of ${data.total} records` : "…"}
+                <span className="ml-3 hidden items-center gap-1.5 text-[10px] text-purple-200/35 lg:inline-flex">
+                  <kbd className="obs-kbd">↑</kbd>
+                  <kbd className="obs-kbd">↓</kbd> navigate
+                  <kbd className="obs-kbd ml-1.5">↵</kbd> quick check-in
+                  <kbd className="obs-kbd ml-1.5">esc</kbd> clear
+                </span>
               </p>
               <div className="flex items-center gap-2">
                 <Button
