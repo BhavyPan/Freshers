@@ -38,6 +38,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         { rawInput: { contains: q } },
         { lookupId: { contains: q } },
         { studentKey: { contains: q } },
+        { actor: { contains: q } },
       ]
     }
     if (resultParam.toUpperCase() !== 'ALL' && resultParam !== '') {
@@ -63,6 +64,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       lookupId: log.lookupId,
       result: log.result,
       studentKey: log.studentKey,
+      actor: log.actor,
       createdAt: log.createdAt.toISOString(),
     }))
 

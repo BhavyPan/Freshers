@@ -183,3 +183,36 @@ Stage Summary:
 - OBSIDIAN '26 now: 8 spec pages + 14 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, live announcements + analytics, kiosk mode, QR share, keyboard nav, student profile drawer + timeline, invite links + pass PNG, kiosk attract).
 - Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER).
 - Risks: none known. Next-round ideas: bulk invite QR sheet (printable PDF grid of per-student passes), volunteer activity attribution view, check-in heatmap by minute, announcement scheduling (auto-expire), dark/light e-ticket email template.
+
+---
+Task ID: 7 (cron webDevReview round 5)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + entry heatmap + bulk pass sheets + announcement scheduling + desk attribution
+
+Work Log:
+QA & status:
+- Reviewed worklog + dev.log (all 200s) → full browser QA (agent-browser): landing (3D + banner + live counter), verify→GRANTED, admin login, dashboard, registry, reports, QR — zero bugs, zero console errors → chose feature development.
+- Reverted QA check-in OBS26-021 via audit-logged uncheckin to keep ledger clean.
+
+Schema (db:push OK, dev server restarted for fresh Prisma client):
+- EventSettings.announcementExpiresAt DateTime? — announcement auto-expiry
+- AuditLog.actor String? (+ index) — desk-operator attribution for MANUAL actions
+
+New features:
+1. ENTRY HEATMAP (dashboard): stats API now returns `heatmap` (exactly 48 × 15-min buckets = last 12 h). New EntryHeatmap card — 4 rows × 12 cells with hour labels, quiet→busy intensity ramp (faint purple → fuchsia → amber glow), latest cell ringed, per-cell tooltip, legend, "busiest N in a quarter hour" caption. Verified desktop + mobile 390px.
+2. BULK PASS SHEETS (reports): GET /api/admin/export/pass-sheets?scope=notarrived|checkedin|full — server-side pdf-lib A4 grid, 10 branded passes/sheet (personal invite QR + name + ID + dept/year, purple header strip, page footer w/ timestamp). 58 students → 6-page PDF verified in browser PDF viewer (169 KB, renders beautifully). New Reports card w/ scope select + Download PDF.
+3. ANNOUNCEMENT SCHEDULING (flagship): broadcast accepts expiresInMinutes (5/15/30/1h or until-cleared). Lazy expiry centralized in getEventSettings — any reader (pulse/qr/event) clears expired notice + persists, no cron needed. UI: AUTO-CLEAR chip row (amber active glow), LIVE badge shows ticking countdown ("● LIVE · 5m left", 15 s ticker), volunteer read-only shows "auto-clears · Xm left", toast copy fixed ("auto-clears in 4m"). Round-trip verified: broadcast 15m → pulse carries expiresAt → 1-minute-expiry test → banner gone from verify page after expiry → demo announcement restored (no expiry).
+4. DESK ACTIVITY ATTRIBUTION: logAudit accepts actor; quick-checkin + students[PATCH checkin/uncheckin/edit + DELETE] record guard username. New GET /api/admin/activity?window=24 → desks (entries grouped by Student.checkinBy, SELF merged) + manualActions (audit GRANTED/UNCHECKED/EDITED per actor). Reports "Desk Activity" card: emerald self-scan vs purple operator bars (animated share), entries + last-at, manual-action chips ("volunteer +1 in"). Audit trail gains "By" column (actor chip / muted SELF) + actor searchable; table min-w 760.
+- api-client: setAnnouncement(text, expiresInMinutes), activity(), passSheetsUrl(). types.ts updated (AuditRow.actor, expiresAt on 3 response types, ActivityResponse, StatsResponse.heatmap).
+
+Styling details:
+- Heatmap glow shadows + hover scale-110 + ring on latest; animated gradient share bars (emerald/purple); amber active expiry chips w/ shadow glow; actor chips w/ dot; SELF SCAN badge nowrap+shrink-0 (mobile wrap fix); pass-sheets card fuchsia accent.
+
+Verification:
+- bun run lint PASS · 7 routes console-error-free · dev.log clean (all 200s) · activity/heatmap/pass-sheets/expiry APIs all verified via curl AND browser.
+- Data: OBS26-023 (Aadhya Prasad) checked in by volunteer — left intentionally as live demo of attribution. Demo announcement restored LIVE (until cleared). Gate OPEN, 83 registered.
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 18 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, announcements + analytics, kiosk mode + attract, QR share, keyboard nav, profile drawer + timeline, invite links + pass PNG, entry heatmap, pass sheets PDF, announcement scheduling, desk attribution).
+- Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
+- Risks: none known. Old audit rows have actor=null (pre-feature) — render as "SELF", accurate. Next-round ideas: WhatsApp share of pass PNG via canvas blob on mobile, announcement quick re-broadcast history, per-dept fill-rate goals w/ confetti on 100%, kiosk two-line receipt printer output, scheduled digest email of audit CSV.

@@ -55,12 +55,14 @@ model AuditLog {
   result     String // GRANTED | ALREADY_CHECKED_IN | DENIED | RATE_LIMITED
   studentId  String? // link to student row when found
   studentKey String? // denormalized studentId key
+  actor      String? // username of the desk operator for MANUAL actions (null = self-scan)
   ipHash     String? // hashed IP for abuse tracking (no raw IP stored)
   userAgent  String?
   createdAt  DateTime @default(now())
 
   @@index([result])
   @@index([createdAt])
+  @@index([actor])
 }
 
 // Event settings + QR token (single row)
@@ -71,5 +73,6 @@ model EventSettings {
   tagline      String    @default("Unfold the Unknown")
   status       String    @default("OPEN") // OPEN | PAUSED | CLOSED — entry gate control
   announcement String? // one-line live notice broadcast to all public screens
+  announcementExpiresAt DateTime? // when set, the announcement auto-clears at this time
   updatedAt    DateTime  @updatedAt
 }

@@ -26,30 +26,6 @@ export interface AdminSessionInfo {
   role: AdminRole;
 }
 
-export interface StatsResponse {
-  ok: boolean;
-  stats: {
-    totalRegistered: number;
-    checkedIn: number;
-    notArrived: number;
-    deniedAttempts: number;
-    checkinRate: number;
-    lastCheckinAt: string | null;
-    departments: string[];
-    studentsByDept: { dept: string; total: number; checkedIn: number }[];
-    timeline: { bucket: string; count: number }[];
-    checkedInLastHour: number;
-    busiestWindow: { startsAt: string; count: number } | null;
-  };
-  recent: {
-    id: string;
-    studentId: string;
-    name: string;
-    department: string | null;
-    checkinAt: string;
-  }[];
-}
-
 export interface StudentRow {
   id: string;
   studentId: string;
@@ -122,6 +98,7 @@ export interface AuditRow {
   lookupId: string;
   result: string;
   studentKey: string | null;
+  actor: string | null;
   createdAt: string;
 }
 
@@ -142,6 +119,7 @@ export interface QrResponse {
   qrDataUrl: string;
   generatedAt: string;
   announcement: string | null;
+  announcementExpiresAt: string | null;
 }
 
 export interface EventStatusResponse {
@@ -150,6 +128,7 @@ export interface EventStatusResponse {
   eventName: string;
   tagline: string;
   announcement: string | null;
+  announcementExpiresAt: string | null;
 }
 
 export interface PublicPulseResponse {
@@ -158,6 +137,7 @@ export interface PublicPulseResponse {
   tagline: string;
   status: EventStatus;
   announcement: string | null;
+  announcementExpiresAt: string | null;
   checkedIn: number;
   totalRegistered: number;
   recent: { id: string; firstName: string; lastInitial: string; department: string | null; at: string }[];
@@ -174,4 +154,47 @@ export interface LoginResponse {
   ok: boolean;
   user?: AdminSessionInfo;
   message?: string;
+}
+
+export interface ActivityResponse {
+  ok: boolean;
+  desks: {
+    actor: string; // username, or "SELF" for student self-scans
+    label: string; // display label
+    entries: number; // checked-in students attributed
+    lastAt: string | null; // most recent attributed check-in
+  }[];
+  manualActions: {
+    actor: string;
+    checkins: number;
+    reversals: number;
+    edits: number;
+    lastAt: string | null;
+  }[];
+  windowHours: number;
+}
+
+export interface StatsResponse {
+  ok: boolean;
+  stats: {
+    totalRegistered: number;
+    checkedIn: number;
+    notArrived: number;
+    deniedAttempts: number;
+    checkinRate: number;
+    lastCheckinAt: string | null;
+    departments: string[];
+    studentsByDept: { dept: string; total: number; checkedIn: number }[];
+    timeline: { bucket: string; count: number }[];
+    checkedInLastHour: number;
+    busiestWindow: { startsAt: string; count: number } | null;
+    heatmap: { bucket: string; count: number }[];
+  };
+  recent: {
+    id: string;
+    studentId: string;
+    name: string;
+    department: string | null;
+    checkinAt: string;
+  }[];
 }

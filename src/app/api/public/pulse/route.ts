@@ -34,6 +34,9 @@ export async function GET(): Promise<NextResponse> {
       tagline: settings.tagline,
       status,
       announcement: settings.announcement?.trim() ? settings.announcement.trim().slice(0, 200) : null,
+      announcementExpiresAt: settings.announcementExpiresAt
+        ? settings.announcementExpiresAt.toISOString()
+        : null,
       checkedIn,
       totalRegistered,
       recent: recent.map((s) => {

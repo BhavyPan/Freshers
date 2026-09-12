@@ -16,13 +16,34 @@ export function getBaseUrl(req: Request): string {
 export async function getEventSettings(): Promise<EventSettings> {
   await ensureSeeded()
   const settings = await db.eventSettings.findFirst()
-  if (settings) return settings
+  if (settings) return expireAnnouncement(settings)
   try {
     return await db.eventSettings.create({ data: {} })
   } catch {
     const retry = await db.eventSettings.findFirst()
-    if (retry) return retry
+    if (retry) return expireAnnouncement(retry)
     throw new Error('Event settings unavailable')
+  }
+}
+
+/**
+ * Lazy announcement expiry — if the live notice has an expiry in the past,
+ * clear it once (any reader: pulse, QR, event status) and persist the clear so
+ * every public screen stops showing it without needing a cron.
+ */
+async function expireAnnouncement(settings: EventSettings): Promise<EventSettings> {
+  const expired =
+    settings.announcementExpiresAt &&
+    settings.announcement &&
+    settings.announcementExpiresAt.getTime() <= Date.now()
+  if (!expired) return settings
+  try {
+    return await db.eventSettings.update({
+      where: { id: settings.id },
+      data: { announcement: null, announcementExpiresAt: null },
+    })
+  } catch {
+    return { ...settings, announcement: null, announcementExpiresAt: null }
   }
 }
 

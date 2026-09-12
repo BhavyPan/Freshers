@@ -23,6 +23,9 @@ export async function GET(): Promise<NextResponse> {
     eventName: settings.eventName,
     tagline: settings.tagline,
     announcement: settings.announcement ?? null,
+    announcementExpiresAt: settings.announcementExpiresAt
+      ? settings.announcementExpiresAt.toISOString()
+      : null,
   }
   return NextResponse.json(payload)
 }
@@ -34,9 +37,17 @@ export async function PATCH(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    const body = (await req.json()) as { status?: unknown; announcement?: unknown }
+    const body = (await req.json()) as {
+      status?: unknown
+      announcement?: unknown
+      expiresInMinutes?: unknown
+    }
     const settings = await getEventSettings()
-    const data: { status?: string; announcement?: string | null } = {}
+    const data: {
+      status?: string
+      announcement?: string | null
+      announcementExpiresAt?: Date | null
+    } = {}
 
     if (body?.status !== undefined) {
       const requested = String(body.status ?? '').toUpperCase() as EventStatus
@@ -49,13 +60,48 @@ export async function PATCH(req: Request): Promise<NextResponse> {
       data.status = requested
     }
 
+    let clearsAnnouncement = false
     if (body?.announcement !== undefined) {
       if (body.announcement === null) {
         data.announcement = null
+        clearsAnnouncement = true
       } else {
         const text = String(body.announcement ?? '').trim().slice(0, 200)
         data.announcement = text === '' ? null : text
+        if (data.announcement === null) clearsAnnouncement = true
       }
+    }
+
+    if (body?.expiresInMinutes !== undefined) {
+      if (body.expiresInMinutes === null) {
+        data.announcementExpiresAt = null
+      } else {
+        const minutes = Number(body.expiresInMinutes)
+        if (!Number.isFinite(minutes) || minutes < 0 || minutes > 24 * 60) {
+          return NextResponse.json(
+            { ok: false, message: 'expiresInMinutes must be between 0 and 1440.' },
+            { status: 400 }
+          )
+        }
+        // expiry anchors at "now" — both for fresh broadcasts and for extending
+        // the currently live notice; minutes=0 clears the schedule
+        const anchor = new Date()
+        data.announcementExpiresAt =
+          minutes === 0 ? null : new Date(anchor.getTime() + minutes * 60 * 1000)
+      }
+      const effectiveAnnouncement =
+        data.announcement !== undefined ? data.announcement : settings.announcement
+      if (data.announcementExpiresAt && !effectiveAnnouncement) {
+        return NextResponse.json(
+          { ok: false, message: 'Broadcast an announcement before scheduling an expiry.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // clearing the announcement also clears any schedule
+    if (clearsAnnouncement && data.announcementExpiresAt === undefined) {
+      data.announcementExpiresAt = null
     }
 
     if (Object.keys(data).length === 0) {
@@ -71,6 +117,9 @@ export async function PATCH(req: Request): Promise<NextResponse> {
       eventName: updated.eventName,
       tagline: updated.tagline,
       announcement: updated.announcement ?? null,
+      announcementExpiresAt: updated.announcementExpiresAt
+        ? updated.announcementExpiresAt.toISOString()
+        : null,
     }
     return NextResponse.json(payload)
   } catch (err) {

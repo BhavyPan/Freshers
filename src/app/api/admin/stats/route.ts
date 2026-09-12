@@ -6,6 +6,8 @@ import type { StatsResponse } from '@/lib/types'
 
 const BUCKET_MS = 15 * 60 * 1000
 const TIMELINE_WINDOW_MS = 6 * 60 * 60 * 1000
+const HEATMAP_WINDOW_MS = 12 * 60 * 60 * 1000
+const QUERY_WINDOW_MS = Math.max(TIMELINE_WINDOW_MS, HEATMAP_WINDOW_MS)
 
 export async function GET(): Promise<NextResponse> {
   const guard = await requireAdmin()
@@ -33,7 +35,7 @@ export async function GET(): Promise<NextResponse> {
         db.student.groupBy({ by: ['department'], _count: { _all: true } }),
         db.student.groupBy({ by: ['department'], where: { checkedIn: true }, _count: { _all: true } }),
         db.auditLog.findMany({
-          where: { result: 'GRANTED', createdAt: { gte: new Date(Date.now() - TIMELINE_WINDOW_MS) } },
+          where: { result: 'GRANTED', createdAt: { gte: new Date(Date.now() - QUERY_WINDOW_MS) } },
           select: { createdAt: true },
         }),
         db.student.findMany({
@@ -89,6 +91,17 @@ export async function GET(): Promise<NextResponse> {
       }
     }
 
+    // entry heatmap — exactly 48 × 15-min buckets = last 12 hours (newest last)
+    const heatEnd = Math.floor(Date.now() / BUCKET_MS) * BUCKET_MS
+    const heatStart = heatEnd - (48 - 1) * BUCKET_MS
+    const heatmap: { bucket: string; count: number }[] = []
+    for (let bucket = heatStart; bucket <= heatEnd; bucket += BUCKET_MS) {
+      heatmap.push({
+        bucket: new Date(bucket).toISOString(),
+        count: bucketCounts.get(bucket) ?? 0,
+      })
+    }
+
     const recent = recentRows.map((row) => ({
       id: row.id,
       studentId: row.studentId,
@@ -111,6 +124,7 @@ export async function GET(): Promise<NextResponse> {
         timeline,
         checkedInLastHour,
         busiestWindow,
+        heatmap,
       },
       recent,
     } satisfies StatsResponse)

@@ -2,6 +2,7 @@
 
 import type {
   AdminSessionInfo,
+  ActivityResponse,
   AuditResponse,
   EventStatus,
   EventStatusResponse,
@@ -163,11 +164,17 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
-  setAnnouncement: (text: string | null) =>
+  setAnnouncement: (text: string | null, expiresInMinutes?: number | null) =>
     request<EventStatusResponse>("/api/admin/event", {
       method: "PATCH",
-      body: JSON.stringify({ announcement: text }),
+      body: JSON.stringify({
+        announcement: text,
+        ...(expiresInMinutes !== undefined ? { expiresInMinutes } : {}),
+      }),
     }),
+
+  activity: (windowHours = 24) =>
+    request<ActivityResponse>(`/api/admin/activity?window=${windowHours}`),
 
   quickCheckin: (studentId: string) =>
     request<QuickCheckinResponse>("/api/admin/quick-checkin", {
@@ -184,4 +191,8 @@ export const importTemplateUrl = "/api/admin/import/template";
 
 export function qrDownloadUrl(format: "png" | "svg" | "pdf") {
   return `/api/qr/download?format=${format}`;
+}
+
+export function passSheetsUrl(scope: "notarrived" | "checkedin" | "full") {
+  return `/api/admin/export/pass-sheets?scope=${scope}`;
 }

@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle,
   Check,
+  Clock,
   Copy,
   Download,
   Eye,
@@ -23,6 +24,7 @@ import {
   ScanLine,
   Share2,
   Shield,
+  TimerOff,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,25 @@ const ANNOUNCEMENT_PRESETS: { icon: string; label: string; text: string }[] = [
   },
 ];
 
+/** Auto-clear choices for a live announcement (null = stays until cleared). */
+const EXPIRY_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: "Until cleared" },
+  { value: 5, label: "5m" },
+  { value: 15, label: "15m" },
+  { value: 30, label: "30m" },
+  { value: 60, label: "1h" },
+];
+
+function expiryCountdown(expiresAt: string | null, now: number | null): string | null {
+  if (!expiresAt || now === null) return null;
+  const ms = new Date(expiresAt).getTime() - now;
+  if (ms <= 0) return null;
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "<1m left";
+  if (mins < 60) return `${mins}m left`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m left`;
+}
+
 export function QRView() {
   const admin = useObsidianStore((s) => s.admin);
   const isAdmin = admin?.role === "ADMIN";
@@ -79,11 +100,16 @@ export function QRView() {
   const [rotating, setRotating] = useState(false);
   const [settingStatus, setSettingStatus] = useState<EventStatus | null>(null);
   const [announcementDraft, setAnnouncementDraft] = useState<string | null>(null);
+  const [expiryChoice, setExpiryChoice] = useState<number | null>(15);
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
+  const [nowTs, setNowTs] = useState<number | null>(null);
 
   useEffect(() => {
     setCanNativeShare(typeof navigator !== "undefined" && "share" in navigator);
+    setNowTs(Date.now());
+    const t = setInterval(() => setNowTs(Date.now()), 15000);
+    return () => clearInterval(t);
   }, []);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
@@ -132,14 +158,17 @@ export function QRView() {
     if (announcementDraft === null) return;
     setSavingAnnouncement(true);
     try {
-      const res = await api.setAnnouncement(announcementDraft.trim() === "" ? null : announcementDraft.trim());
+      const text = announcementDraft.trim() === "" ? null : announcementDraft.trim();
+      const res = await api.setAnnouncement(text, expiryChoice);
       setAnnouncementDraft(null);
       await qc.invalidateQueries({ queryKey: ["qr"] });
       await qc.invalidateQueries({ queryKey: ["pulse"] });
       toast({
         title: res.announcement ? "Announcement live" : "Announcement cleared",
         description: res.announcement
-          ? "Every public screen shows it within seconds."
+          ? res.announcementExpiresAt
+            ? `Every public screen shows it — auto-clears in ${(expiryCountdown(res.announcementExpiresAt, Date.now()) ?? "a moment").replace(/ left$/, "")}.`
+            : "Every public screen shows it within seconds."
           : "Public screens no longer show a notice.",
       });
     } catch (err) {
@@ -313,6 +342,12 @@ export function QRView() {
             {data.announcement ? (
               <span className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" /> live
+                {expiryCountdown(data.announcementExpiresAt, nowTs) && (
+                  <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-amber-300/90 normal-case">
+                    <Clock className="h-2.5 w-2.5" />
+                    {expiryCountdown(data.announcementExpiresAt, nowTs)}
+                  </span>
+                )}
               </span>
             ) : (
               <span className="rounded-full border border-purple-500/25 bg-purple-500/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200/50">off</span>
@@ -320,7 +355,8 @@ export function QRView() {
           </div>
           <p className="mt-3 text-[12px] leading-relaxed text-purple-200/55">
             Broadcast a one-line notice to every public screen — entry page and verification page. Perfect for
-            “Line moved to Gate B” moments.
+            “Line moved to Gate B” moments. Optionally auto-clear after a window so stale notices never outlive
+            their moment.
           </p>
 
           {isAdmin ? (
@@ -348,6 +384,31 @@ export function QRView() {
                 aria-label="Announcement text"
                 className="w-full resize-none rounded-xl border border-purple-500/30 bg-[#0b0517]/90 px-4 py-3 text-sm leading-relaxed text-purple-50 placeholder:text-purple-200/25 focus:border-amber-300/60 focus:ring-2 focus:ring-amber-400/20"
               />
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Auto-clear schedule">
+                <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-purple-200/45">
+                  <TimerOff className="h-3 w-3" /> auto-clear
+                </span>
+                {EXPIRY_OPTIONS.map((opt) => {
+                  const isActive = expiryChoice === opt.value;
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setExpiryChoice(opt.value)}
+                      disabled={savingAnnouncement}
+                      aria-pressed={isActive}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide transition-all disabled:opacity-50",
+                        isActive
+                          ? "border-amber-300/60 bg-amber-500/15 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.18)]"
+                          : "border-purple-500/25 bg-[#0b0514]/70 text-purple-200/55 hover:border-amber-300/40 hover:text-amber-200/80"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[10px] tabular-nums text-purple-200/40">
                   {(announcementDraft ?? data.announcement ?? "").length}/200
@@ -382,9 +443,14 @@ export function QRView() {
               </div>
             </div>
           ) : data.announcement ? (
-            <p className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
-              “{data.announcement}”
-            </p>
+            <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/8 px-4 py-3">
+              <p className="text-sm text-amber-100">“{data.announcement}”</p>
+              {expiryCountdown(data.announcementExpiresAt, nowTs) && (
+                <p className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300/70">
+                  <Clock className="h-3 w-3" /> auto-clears · {expiryCountdown(data.announcementExpiresAt, nowTs)}
+                </p>
+              )}
+            </div>
           ) : (
             <p className="mt-3 text-[11px] text-purple-200/40">No notice is live. Only admins can broadcast.</p>
           )}

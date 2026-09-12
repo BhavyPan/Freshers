@@ -63,6 +63,7 @@ export async function GET(req: Request, context: RouteContext): Promise<NextResp
         lookupId: true,
         result: true,
         studentKey: true,
+        actor: true,
         createdAt: true,
       },
     })
@@ -110,6 +111,7 @@ export async function PATCH(req: Request, context: RouteContext): Promise<NextRe
           result: 'GRANTED',
           studentId: student.id,
           studentKey: student.studentId,
+          actor: guard.user.username,
           req,
         })
       }
@@ -135,6 +137,7 @@ export async function PATCH(req: Request, context: RouteContext): Promise<NextRe
         result: 'UNCHECKED',
         studentId: student.id,
         studentKey: student.studentId,
+        actor: guard.user.username,
         req,
       })
       const row = await toStudentRow(student.id)
@@ -169,6 +172,7 @@ export async function PATCH(req: Request, context: RouteContext): Promise<NextRe
         result: 'EDITED',
         studentId: student.id,
         studentKey: student.studentId,
+        actor: guard.user.username,
         req,
       })
       const row = await toStudentRow(student.id)
@@ -201,6 +205,7 @@ export async function DELETE(req: Request, context: RouteContext): Promise<NextR
       lookupId: student.studentId,
       result: 'DELETED',
       studentKey: student.studentId,
+      actor: guard.user.username,
       req,
     })
     return NextResponse.json({ ok: true })

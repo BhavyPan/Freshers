@@ -12,18 +12,22 @@ import {
   FileDown,
   FileSpreadsheet,
   FileText,
+  Gauge,
   Hourglass,
+  IdCard,
   Loader2,
+  Printer,
   Search,
   ShieldAlert,
   ScrollText,
+  Users,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, exportUrl } from "@/lib/api-client";
+import { api, exportUrl, passSheetsUrl } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const SCOPES = [
@@ -72,11 +76,20 @@ function timeFmt(iso: string) {
   }
 }
 
+type PassScope = "notarrived" | "checkedin" | "full";
+
+const PASS_SCOPES: { id: PassScope; label: string }[] = [
+  { id: "notarrived", label: "Not arrived" },
+  { id: "checkedin", label: "Checked in" },
+  { id: "full", label: "Full registry" },
+];
+
 export function ReportsView() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [result, setResult] = useState("ALL");
   const [page, setPage] = useState(1);
+  const [passScope, setPassScope] = useState<PassScope>("notarrived");
 
   useMemo(() => {
     const t = setTimeout(() => {
@@ -96,6 +109,12 @@ export function ReportsView() {
     queryKey: ["audit", debouncedQ, result, page],
     queryFn: () => api.audit({ q: debouncedQ, result, page, pageSize: 15 }),
     placeholderData: keepPreviousData,
+  });
+
+  const activityQuery = useQuery({
+    queryKey: ["activity"],
+    queryFn: () => api.activity(24),
+    refetchInterval: 15000,
   });
 
   const stats = statsQuery.data?.stats;
@@ -147,6 +166,150 @@ export function ReportsView() {
         ))}
       </div>
 
+      {/* pass sheets — printable invite QR grid */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.22 }}
+        className="obs-card obs-card-hover rounded-2xl border border-fuchsia-400/20 p-5"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-300">
+            <IdCard className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-purple-50">Pass Sheets — printable invite QR cards</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-purple-200/50">
+              An A4 grid with each junior&apos;s personal invite QR, name and ID — 10 passes per sheet. Print,
+              cut along the grid, and slip them into welcome kits or hand them out at the gate.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <Select value={passScope} onValueChange={(v) => setPassScope(v as PassScope)}>
+              <SelectTrigger className="h-9 w-40 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100">
+                <SelectValue placeholder="Scope" />
+              </SelectTrigger>
+              <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
+                {PASS_SCOPES.map((s) => (
+                  <SelectItem key={s.id} value={s.id} className="text-xs">
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <a
+              href={passSheetsUrl(passScope)}
+              download
+              className="obs-glow-btn flex h-9 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 px-4 text-xs font-bold text-white"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Download PDF
+            </a>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* desk activity attribution */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.26 }}
+        className="obs-card rounded-2xl p-5"
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <Users className="h-4 w-4 text-purple-300" />
+          <p className="text-sm font-semibold text-purple-100">Desk Activity — who checked juniors in</p>
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-purple-200/50">
+            <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-purple-400" /> live · 24 h window
+          </span>
+        </div>
+        {activityQuery.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 rounded-xl bg-purple-500/10" />
+            ))}
+          </div>
+        ) : !activityQuery.data || activityQuery.data.desks.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-sm text-purple-200/40">
+            <Gauge className="h-8 w-8 text-purple-300/25" />
+            No check-ins yet — desk attribution appears with the first entry.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activityQuery.data.desks.map((d, i) => {
+              const max = activityQuery.data?.desks[0]?.entries ?? 1;
+              const pct = Math.max(4, Math.round((d.entries / Math.max(max, 1)) * 100));
+              const isSelf = d.actor === "SELF";
+              return (
+                <div
+                  key={d.actor}
+                  className="obs-row-hover flex items-center gap-3 rounded-xl border border-purple-500/15 bg-[#0b0616]/70 px-4 py-2.5"
+                >
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      isSelf
+                        ? "bg-gradient-to-br from-emerald-500/30 to-teal-800/30 text-emerald-200"
+                        : "bg-gradient-to-br from-purple-500/30 to-violet-800/30 text-purple-200"
+                    )}
+                  >
+                    {isSelf ? "≡" : d.actor.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-purple-50">{d.label}</p>
+                      {isSelf && (
+                        <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-300">
+                          self scan
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-purple-500/10">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.7, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                        className={cn(
+                          "h-full rounded-full",
+                          isSelf
+                            ? "bg-gradient-to-r from-emerald-700 via-emerald-500 to-teal-400"
+                            : "bg-gradient-to-r from-violet-800 via-purple-500 to-fuchsia-400"
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display text-lg font-black tabular-nums text-purple-50">{d.entries}</p>
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-purple-200/45">
+                      {d.entries === 1 ? "entry" : "entries"}
+                      {d.lastAt ? ` · ${format(new Date(d.lastAt), "HH:mm")}` : ""}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            {activityQuery.data.manualActions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-purple-200/45">
+                  Manual actions (24 h):
+                </span>
+                {activityQuery.data.manualActions.map((m) => (
+                  <span
+                    key={m.actor}
+                    className="flex items-center gap-1.5 rounded-full border border-purple-500/25 bg-purple-500/8 px-2.5 py-1 text-[10px] text-purple-200/80"
+                  >
+                    <span className="font-bold text-purple-100">{m.actor}</span>
+                    {m.checkins > 0 && <span className="text-emerald-300">+{m.checkins} in</span>}
+                    {m.reversals > 0 && <span className="text-amber-300">{m.reversals} undo</span>}
+                    {m.edits > 0 && <span className="text-purple-300">{m.edits} edit</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </motion.div>
+
       {/* audit trail */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
@@ -193,13 +356,14 @@ export function ReportsView() {
         </div>
 
         <div className="obs-scrollbar overflow-x-auto">
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-purple-500/15 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-purple-200/55">
                 <th className="px-5 py-3">Time</th>
                 <th className="px-5 py-3">Raw Input</th>
                 <th className="px-5 py-3">Looked-up ID</th>
                 <th className="px-5 py-3">Result</th>
+                <th className="px-5 py-3">By</th>
                 <th className="px-5 py-3">Matched Student</th>
               </tr>
             </thead>
@@ -216,7 +380,7 @@ export function ReportsView() {
                 ))
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-sm text-purple-200/40">
+                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-purple-200/40">
                     <ScrollText className="mx-auto mb-3 h-8 w-8 text-purple-300/25" />
                     No verification attempts logged yet.
                   </td>
@@ -236,6 +400,16 @@ export function ReportsView() {
                       <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide", RESULT_TONES[l.result] ?? RESULT_TONES.RATE_LIMITED)}>
                         {l.result.replace(/_/g, " ").toLowerCase()}
                       </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      {l.actor ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                          {l.actor}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-[0.12em] text-purple-200/30">self</span>
+                      )}
                     </td>
                     <td className="max-w-44 truncate px-5 py-3 text-xs text-purple-200/70">
                       {l.studentKey ? <span className="font-mono">{l.studentKey}</span> : <span className="text-purple-200/30">no match</span>}

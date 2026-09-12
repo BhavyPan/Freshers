@@ -6,6 +6,7 @@ import {
   Activity,
   BadgeCheck,
   Flame,
+  Grid3X3,
   Hourglass,
   Layers,
   Radar,
@@ -36,6 +37,63 @@ function timeAgo(iso: string) {
   } catch {
     return iso;
   }
+}
+
+/** Entry-heatmap intensity ramp — quiet → busy (purple → fuchsia → amber). */
+function heatClass(count: number): string {
+  if (count <= 0) return "bg-purple-500/[0.06] border-purple-500/10";
+  if (count === 1) return "bg-purple-500/30 border-purple-400/25";
+  if (count <= 3) return "bg-purple-500/55 border-purple-300/30";
+  if (count <= 6) return "bg-fuchsia-500/75 border-fuchsia-300/40 shadow-[0_0_8px_rgba(217,70,239,0.25)]";
+  return "bg-amber-400/85 border-amber-300/60 shadow-[0_0_12px_rgba(251,191,36,0.4)]";
+}
+
+function EntryHeatmap({ heatmap }: { heatmap: { bucket: string; count: number }[] }) {
+  const ROW = 12; // 12 × 15-min = 3 hours per row, 4 rows = 12 hours
+  const rows: { bucket: string; count: number }[][] = [];
+  for (let i = 0; i < heatmap.length; i += ROW) rows.push(heatmap.slice(i, i + ROW));
+  const max = Math.max(1, ...heatmap.map((h) => h.count));
+  return (
+    <div>
+      <div className="space-y-1.5">
+        {rows.map((row, ri) => (
+          <div key={ri} className="flex items-center gap-1.5">
+            <span className="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-wide text-purple-200/40">
+              {format(new Date(row[0].bucket), "h a")}
+            </span>
+            <div className="grid flex-1 grid-cols-12 gap-1.5">
+              {row.map((cell, ci) => {
+                const isNow = ri === rows.length - 1 && ci === row.length - 1;
+                return (
+                  <div
+                    key={cell.bucket}
+                    title={`${format(new Date(cell.bucket), "h:mm a")} — ${cell.count} ${cell.count === 1 ? "entry" : "entries"}`}
+                    className={cn(
+                      "h-6 rounded-[5px] border transition-transform hover:scale-110 hover:z-10",
+                      heatClass(cell.count),
+                      isNow && "ring-2 ring-purple-300/80 ring-offset-1 ring-offset-[#0e0819]"
+                    )}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10px] text-purple-200/40">
+          Each square = 15 minutes · latest square ringed · busiest {max} in a quarter hour
+        </p>
+        <div className="flex items-center gap-1.5" aria-hidden>
+          <span className="text-[9px] uppercase tracking-[0.14em] text-purple-200/45">quiet</span>
+          {[0, 1, 3, 6, 9].map((c) => (
+            <span key={c} className={cn("h-3 w-3 rounded-[3px] border", heatClass(c))} />
+          ))}
+          <span className="text-[9px] uppercase tracking-[0.14em] text-purple-200/45">busy</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AnimatedNumber({ value }: { value: number | string }) {
@@ -205,6 +263,23 @@ export function DashboardView() {
             </p>
           </div>
         )}
+      </motion.div>
+
+      {/* entry heatmap */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.32 }}
+        className="obs-card rounded-2xl p-5"
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <Grid3X3 className="h-4 w-4 text-purple-300" />
+          <p className="text-sm font-semibold text-purple-100">Entry Heatmap — last 12 hours</p>
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-purple-200/50">
+            <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-purple-400" /> live
+          </span>
+        </div>
+        <EntryHeatmap heatmap={stats.heatmap} />
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-5">

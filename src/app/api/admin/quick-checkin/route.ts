@@ -38,6 +38,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         rawInput: raw,
         lookupId,
         result: 'DENIED',
+        actor: guard.user.username,
       })
       return NextResponse.json({
         ok: true,
@@ -89,6 +90,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       result: 'GRANTED',
       studentId: student.id,
       studentKey: student.studentId,
+      actor: guard.user.username,
     })
 
     return NextResponse.json({
