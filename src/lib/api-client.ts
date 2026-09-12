@@ -12,6 +12,7 @@ import type {
   QrResponse,
   QuickCheckinResponse,
   StatsResponse,
+  StudentProfileResponse,
   StudentsResponse,
   VerifyResponse,
 } from "./types";
@@ -109,6 +110,9 @@ export const api = {
 
   deleteStudent: (id: string) =>
     request<{ ok: boolean }>(`/api/admin/students/${id}`, { method: "DELETE" }),
+
+  studentProfile: (id: string) =>
+    request<StudentProfileResponse>(`/api/admin/students/${id}`),
 
   importPreview: (file: File, sheet?: string) => {
     const fd = new FormData();

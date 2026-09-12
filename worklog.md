@@ -153,3 +153,33 @@ Stage Summary:
 - OBSIDIAN '26 now: 8 spec pages + 11 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, live announcements + analytics, kiosk mode, QR share, keyboard nav).
 - Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk is public at #/kiosk (no login needed by design — door tablets).
 - Risks: none known. Next-round ideas: kiosk idle "attract" animation after 60s, WhatsApp QR image share via canvas blob on mobile, student profile drawer with per-student audit history, audit CSV scheduled digest, e-invite PDF generator per student.
+
+---
+Task ID: 6 (cron webDevReview round 4)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + Student Profile Drawer + invite links & e-invite pass PNG + kiosk attract mode
+
+Work Log:
+QA & status:
+- Full browser QA (agent-browser, desktop + mobile 390): landing, verify→GRANTED, kiosk, all 4 admin sections — zero console errors on every route; dev.log clean (all 200s); lint PASS.
+- Verified DB state: 83 students, gate OPEN, announcement live. No bugs found in existing flows → proceeded to feature development.
+
+New features:
+1. STUDENT PROFILE DRAWER (flagship): new GET /api/admin/students/[id] (profile + last 40 audit events, role-guarded), StudentProfileResponse type, api.studentProfile(). New StudentProfileDrawer (shadcn Sheet, right, sm:max-w-md) with: gradient hero (avatar/name/ID/status badge + check-in time/by/attempts chips), desk actions (check-in / revert [admin], copy invite link, WhatsApp invite, Pass PNG), registration record grid (mobile/dept/email/year/registered/record-id), and a per-student VERIFICATION TIMELINE (color-coded dots: GRANTED emerald, ALREADY IN/UNCHECKED/EVENT_CLOSED amber, DENIED/RATE_LIMITED rose, EDITED purple; rail + ping dots + raw input lines). Registry: name cell is now a profile button (hover reveals IdCard glyph + avatar glow) plus a dedicated profile icon button in Actions (available to volunteers too). FIXED flexbox min-size bug: hero/actions/details were collapsing (overflow-hidden allowed shrink below content) — added shrink-0 to all sections.
+2. PERSONAL INVITE LINKS: /#/verify?id=OBS26-xxx pre-fills the verify form (rAF-deferred for hydration-safety + lint), shows emerald "Pre-filled from your personal invite — just hit verify" hint with Link2 icon; hint disappears if user edits the value. Round-trip verified: invite link → prefill → GRANTED.
+3. E-INVITE PASS CARD PNG (src/lib/pass-card.ts): client-side canvas 1000×1400 branded attendee pass — purple gradient + ambient glows + contour rings, diamond glyph, auto-shrinking event name (92→44px) and attendee name, ID pill, dept/year chips, glowing white QR card with corner ticks (QR = personal invite URL), "SCAN · VERIFY · STEP IN", footer, and a green CHECKED IN ribbon when already inside. Waits for document.fonts.ready + resolves the app's real loaded Unbounded/body font families for canvas. Downloads as obsidian26-pass-<ID>.png; verified in browser (1.3MB PNG, design QA'd — looks great).
+4. KIOSK ATTRACT MODE: 60s idle (keydown/pointerdown/pointermove-tracked) → title switches to animated gradient wash (.obs-attract-title) with shine sweep (.obs-attract-sweep), deterministic spark field (hydration-safe constants), badge flips to "DOORS OPEN · STEP RIGHT IN" with glow, breathing ring around the input (.obs-attract-ring), and rotating hint line (4 messages, 3.2s). Any interaction instantly restores normal idle screen. Verified: attract on after 62s idle, exits on keypress, scan works immediately after.
+5. WhatsApp invite: wa.me deep link with branded message (name, ID, personal link) from the drawer.
+
+Styling details:
+- New CSS: obs-attract-title (4.5s gradient hue wash), obs-attract-sweep (skewed shine bar), obs-attract-ring (2.8s breathing glow ring), obs-sheet-fade; all added to prefers-reduced-motion kill-list.
+- Registry profile affordances: avatar scale+glow on hover, IdCard glyph fade-in, focus-visible outlines for a11y.
+
+Verification:
+- bun run lint PASS · 6 routes console-error-free · GET profile API verified (4-event history for OBS26-001) · pass PNG downloaded + inspected · invite prefill → GRANTED round-trip (reverted OBS26-041 via audit-logged uncheckin; kiosk entry OBS26-019 left as legitimate event data) · attract mode timeline verified.
+- Note: announcement still LIVE ("Opening ceremony starts in 10 minutes…") — clear via Event QR Code → Clear if unwanted.
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 14 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, live announcements + analytics, kiosk mode, QR share, keyboard nav, student profile drawer + timeline, invite links + pass PNG, kiosk attract).
+- Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER).
+- Risks: none known. Next-round ideas: bulk invite QR sheet (printable PDF grid of per-student passes), volunteer activity attribution view, check-in heatmap by minute, announcement scheduling (auto-expire), dark/light e-ticket email template.

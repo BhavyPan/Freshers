@@ -40,6 +40,26 @@ import { cn } from "@/lib/utils";
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39}$/;
 const RESET_KEY = "obsidian.kiosk.autoreset";
 const RESET_OPTIONS = [3, 5, 8, 0] as const; // seconds, 0 = manual
+const ATTRACT_AFTER = 60; // seconds idle before the attract loop kicks in
+
+// deterministic spark field for the attract overlay (hydration-safe)
+const ATTRACT_SPARKS = [
+  { left: "12%", size: 3, dur: 11, delay: 0 },
+  { left: "24%", size: 2, dur: 14, delay: 2.5 },
+  { left: "38%", size: 4, dur: 9, delay: 5 },
+  { left: "52%", size: 2, dur: 13, delay: 1.2 },
+  { left: "63%", size: 3, dur: 10, delay: 4 },
+  { left: "74%", size: 2, dur: 15, delay: 6.5 },
+  { left: "86%", size: 3, dur: 12, delay: 3.2 },
+  { left: "94%", size: 2, dur: 10, delay: 7.5 },
+] as const;
+
+const ATTRACT_HINTS = [
+  "Scan the QR on your college ID",
+  "Type your Student ID to walk in",
+  "Doors are open — step into the night",
+  "One scan · one chime · you're in",
+] as const;
 
 type Outcome = {
   key: string;
@@ -109,6 +129,8 @@ export function KioskView({ onExit }: { onExit: () => void }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [clock, setClock] = useState<Date | null>(null);
   const [activity, setActivity] = useState<Outcome[]>([]);
+  const [idleSecs, setIdleSecs] = useState(0);
+  const [hintIdx, setHintIdx] = useState(0);
 
   const { data: pulse } = useQuery({
     queryKey: ["pulse"],
@@ -140,6 +162,38 @@ export function KioskView({ onExit }: { onExit: () => void }) {
   const refocus = useCallback(() => {
     requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }, []);
+
+  // ---- attract mode: idle detection ----------------------------------------
+  const attract = idleSecs >= ATTRACT_AFTER && !outcome && !verifying;
+
+  useEffect(() => {
+    const bump = () => setIdleSecs(0);
+    window.addEventListener("keydown", bump);
+    window.addEventListener("pointerdown", bump);
+    window.addEventListener("pointermove", bump);
+    const id = window.setInterval(() => setIdleSecs((s) => s + 1), 1000);
+    return () => {
+      window.removeEventListener("keydown", bump);
+      window.removeEventListener("pointerdown", bump);
+      window.removeEventListener("pointermove", bump);
+      window.clearInterval(id);
+    };
+  }, []);
+
+  // any outcome / verifying activity also counts as engagement
+  useEffect(() => {
+    if (outcome || verifying) setIdleSecs(0);
+  }, [outcome, verifying]);
+
+  // rotate the attract hint line
+  useEffect(() => {
+    if (!attract) return;
+    const id = window.setInterval(
+      () => setHintIdx((i) => (i + 1) % ATTRACT_HINTS.length),
+      3200
+    );
+    return () => window.clearInterval(id);
+  }, [attract]);
 
   useEffect(() => {
     refocus();
@@ -431,27 +485,85 @@ export function KioskView({ onExit }: { onExit: () => void }) {
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="flex flex-col items-center"
+              className="relative flex flex-col items-center"
             >
-              <span className="mb-7 flex items-center gap-2.5 rounded-full border border-purple-500/40 bg-purple-950/40 px-5 py-1.5">
+              {/* attract-mode spark field */}
+              {attract && (
+                <div aria-hidden className="pointer-events-none absolute inset-0 overflow-visible">
+                  {ATTRACT_SPARKS.map((sp, i) => (
+                    <span
+                      key={i}
+                      className="obs-spark bg-purple-300/80"
+                      style={{
+                        left: sp.left,
+                        width: sp.size,
+                        height: sp.size,
+                        ["--spark-dur" as string]: `${sp.dur}s`,
+                        ["--spark-delay" as string]: `${sp.delay}s`,
+                        ["--spark-op" as string]: 0.7,
+                        boxShadow: "0 0 8px 2px rgba(192,132,252,0.55)",
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <span
+                className={cn(
+                  "mb-7 flex items-center gap-2.5 rounded-full border px-5 py-1.5 transition-colors duration-700",
+                  attract
+                    ? "border-purple-400/70 bg-purple-500/15 shadow-[0_0_24px_rgba(168,85,247,0.35)]"
+                    : "border-purple-500/40 bg-purple-950/40"
+                )}
+              >
                 <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-purple-400" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-purple-200">entry desk</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-purple-200">
+                  {attract ? "doors open · step right in" : "entry desk"}
+                </span>
               </span>
-              <h1 className="font-display obs-gradient-text obs-text-glow max-w-[94vw] text-[10vw] font-black leading-[1.02] tracking-tight sm:text-6xl md:text-7xl">
+              <h1
+                className={cn(
+                  "font-display obs-text-glow relative max-w-[94vw] overflow-hidden text-[10vw] font-black leading-[1.02] tracking-tight sm:text-6xl md:text-7xl",
+                  attract ? "obs-attract-title" : "obs-gradient-text"
+                )}
+              >
                 SHOW YOUR PASS
+                {attract && (
+                  <span
+                    aria-hidden
+                    className="obs-attract-sweep pointer-events-none absolute inset-0"
+                  />
+                )}
               </h1>
-              <p className="mt-5 max-w-md text-sm leading-relaxed text-purple-100/55">
-                Scan the ID or type the Student ID below — the door screen confirms instantly.
-              </p>
+              <motion.p
+                key={attract ? `hint-${hintIdx}` : "hint-static"}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className={cn(
+                  "mt-5 max-w-md text-sm leading-relaxed",
+                  attract ? "font-medium text-purple-100/85" : "text-purple-100/55"
+                )}
+              >
+                {attract
+                  ? ATTRACT_HINTS[hintIdx]
+                  : "Scan the ID or type the Student ID below — the door screen confirms instantly."}
+              </motion.p>
 
               <form
-                className="mt-9 w-full max-w-xl"
+                className="relative mt-9 w-full max-w-xl"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void submit(value);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
+                {attract && (
+                  <span
+                    aria-hidden
+                    className="obs-attract-ring pointer-events-none absolute -inset-2 rounded-3xl"
+                  />
+                )}
                 <input
                   ref={inputRef}
                   value={value}
@@ -462,7 +574,10 @@ export function KioskView({ onExit }: { onExit: () => void }) {
                   autoCapitalize="characters"
                   spellCheck={false}
                   disabled={verifying}
-                  className="obs-card h-20 w-full rounded-2xl text-center font-mono text-3xl font-bold uppercase tracking-[0.28em] text-purple-50 placeholder:text-purple-200/20 placeholder:tracking-[0.2em] focus:border-purple-400/80 focus:outline-none focus:ring-4 focus:ring-purple-500/25 disabled:opacity-60 sm:h-24 sm:text-4xl"
+                  className={cn(
+                    "obs-card h-20 w-full rounded-2xl text-center font-mono text-3xl font-bold uppercase tracking-[0.28em] text-purple-50 placeholder:text-purple-200/20 placeholder:tracking-[0.2em] focus:border-purple-400/80 focus:outline-none focus:ring-4 focus:ring-purple-500/25 disabled:opacity-60 sm:h-24 sm:text-4xl",
+                    attract && "border-purple-400/60 shadow-[0_0_36px_rgba(168,85,247,0.28)]"
+                  )}
                 />
               </form>
 

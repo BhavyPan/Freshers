@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  IdCard,
   Loader2,
   Pencil,
   Play,
@@ -31,6 +32,7 @@ import { api } from "@/lib/api-client";
 import { playFeedback } from "@/lib/feedback";
 import { useObsidianStore } from "@/lib/client-store";
 import { ImportWizard } from "./ImportWizard";
+import { StudentProfileDrawer } from "./StudentProfileDrawer";
 import { cn } from "@/lib/utils";
 
 function timeFmt(iso: string | null) {
@@ -58,6 +60,7 @@ export function RegistryView() {
 
   const [editing, setEditing] = useState<{ id: string; name: string; mobile: string; department: string; email: string; year: string } | null>(null);
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [quickId, setQuickId] = useState("");
   const [highlighted, setHighlighted] = useState<number | null>(null);
@@ -426,20 +429,32 @@ export function RegistryView() {
                         data-kbd-highlight={highlighted === i ? "true" : undefined}
                       >
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileId(s.id);
+                              playFeedback("tap");
+                            }}
+                            title={`View ${s.name}'s profile`}
+                            aria-label={`View profile of ${s.name}`}
+                            className="group/prof flex items-center gap-2.5 rounded-lg px-1.5 py-1 -mx-1.5 text-left transition-colors hover:bg-purple-500/10 focus-visible:outline focus-visible:outline-purple-400/70"
+                          >
                             <span className={cn(
-                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-all group-hover/prof:scale-105 group-hover/prof:shadow-[0_0_14px_rgba(168,85,247,0.4)]",
                               s.checkedIn
                                 ? "bg-gradient-to-br from-purple-500/40 to-violet-800/40 text-purple-100"
                                 : "bg-purple-500/10 text-purple-200/60"
                             )}>
                               {s.name.charAt(0).toUpperCase()}
                             </span>
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-purple-50">{s.name}</p>
-                              {s.mobile && <p className="text-[11px] text-purple-300/50">{s.mobile}</p>}
-                            </div>
-                          </div>
+                            <span className="min-w-0">
+                              <span className="flex items-center gap-1.5">
+                                <span className="truncate font-semibold text-purple-50 group-hover/prof:text-purple-100">{s.name}</span>
+                                <IdCard className="h-3 w-3 shrink-0 text-purple-300/0 transition-colors group-hover/prof:text-purple-300/90" />
+                              </span>
+                              {s.mobile && <span className="block text-[11px] text-purple-300/50">{s.mobile}</span>}
+                            </span>
+                          </button>
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-purple-200/80">{s.studentId}</td>
                         <td className="px-4 py-3">
@@ -467,6 +482,18 @@ export function RegistryView() {
                         <td className="px-4 py-3 text-center font-mono text-xs text-purple-200/60">{s.attempts || 0}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="icon"
+                              onClick={() => {
+                                setProfileId(s.id);
+                                playFeedback("tap");
+                              }}
+                              title="View profile & history"
+                              aria-label={`View profile and history for ${s.name}`}
+                              className="h-8 w-8 rounded-lg border border-purple-500/30 bg-purple-500/5 text-purple-300 hover:bg-purple-500/25 hover:text-purple-100"
+                            >
+                              <IdCard className="h-3.5 w-3.5" />
+                            </Button>
                             {!s.checkedIn && (
                               <Button
                                 size="icon"
@@ -569,6 +596,13 @@ export function RegistryView() {
           </div>
         </>
       )}
+
+      {/* student profile drawer */}
+      <StudentProfileDrawer
+        studentId={profileId}
+        role={admin?.role ?? "VOLUNTEER"}
+        onClose={() => setProfileId(null)}
+      />
 
       {/* edit dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

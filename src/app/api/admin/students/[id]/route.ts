@@ -39,6 +39,43 @@ async function toStudentRow(id: string): Promise<StudentRow | null> {
   }
 }
 
+// GET — full profile + per-student audit history (volunteers included)
+export async function GET(req: Request, context: RouteContext): Promise<NextResponse> {
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
+  }
+  try {
+    const { id } = await context.params
+    const row = await toStudentRow(id)
+    if (!row) {
+      return NextResponse.json({ ok: false, message: 'Student not found' }, { status: 404 })
+    }
+    const logs = await db.auditLog.findMany({
+      where: {
+        OR: [{ studentId: row.id }, { studentKey: row.studentId }],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      select: {
+        id: true,
+        rawInput: true,
+        lookupId: true,
+        result: true,
+        studentKey: true,
+        createdAt: true,
+      },
+    })
+    return NextResponse.json({
+      ok: true,
+      student: row,
+      history: logs.map((l) => ({ ...l, createdAt: l.createdAt.toISOString() })),
+    })
+  } catch {
+    return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })
+  }
+}
+
 export async function PATCH(req: Request, context: RouteContext): Promise<NextResponse> {
   const guard = await requireAdmin()
   if (!guard.ok) {

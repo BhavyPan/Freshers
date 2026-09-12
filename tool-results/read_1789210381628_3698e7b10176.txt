@@ -1,0 +1,637 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+     5→import { motion, AnimatePresence } from "framer-motion";
+     6→import {
+     7→  BadgeCheck,
+     8→  BadgeMinus,
+     9→  BadgePlus,
+    10→  ChevronLeft,
+    11→  ChevronRight,
+    12→  Clock,
+    13→  Loader2,
+    14→  Pencil,
+    15→  Play,
+    16→  Search,
+    17→  Trash2,
+    18→  Undo2,
+    19→  Users,
+    20→  Zap,
+    21→} from "lucide-react";
+    22→import { format } from "date-fns";
+    23→import { Button } from "@/components/ui/button";
+    24→import { Input } from "@/components/ui/input";
+    25→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+    26→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+    27→import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+    28→import { Skeleton } from "@/components/ui/skeleton";
+    29→import { useToast } from "@/hooks/use-toast";
+    30→import { api } from "@/lib/api-client";
+    31→import { playFeedback } from "@/lib/feedback";
+    32→import { useObsidianStore } from "@/lib/client-store";
+    33→import { ImportWizard } from "./ImportWizard";
+    34→import { cn } from "@/lib/utils";
+    35→
+    36→function timeFmt(iso: string | null) {
+    37→  if (!iso) return "—";
+    38→  try {
+    39→    return format(new Date(iso), "dd MMM, h:mm a");
+    40→  } catch {
+    41→    return iso;
+    42→  }
+    43→}
+    44→
+    45→export function RegistryView() {
+    46→  const admin = useObsidianStore((s) => s.admin);
+    47→  const isAdmin = admin?.role === "ADMIN";
+    48→  const { toast } = useToast();
+    49→  const qc = useQueryClient();
+    50→
+    51→  const [tab, setTab] = useState<"students" | "import">("students");
+    52→  const [q, setQ] = useState("");
+    53→  const [debouncedQ, setDebouncedQ] = useState("");
+    54→  const [status, setStatus] = useState("ALL");
+    55→  const [dept, setDept] = useState("ALL");
+    56→  const [sort, setSort] = useState("recent");
+    57→  const [page, setPage] = useState(1);
+    58→
+    59→  const [editing, setEditing] = useState<{ id: string; name: string; mobile: string; department: string; email: string; year: string } | null>(null);
+    60→  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+    61→  const [actionBusy, setActionBusy] = useState<string | null>(null);
+    62→  const [quickId, setQuickId] = useState("");
+    63→  const [highlighted, setHighlighted] = useState<number | null>(null);
+    64→  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+    65→
+    66→  // debounce search
+    67→  useMemo(() => {
+    68→    const t = setTimeout(() => {
+    69→      setDebouncedQ(q);
+    70→      setPage(1);
+    71→    }, 350);
+    72→    return () => clearTimeout(t);
+    73→  }, [q]);
+    74→
+    75→  const statsQuery = useQuery({
+    76→    queryKey: ["stats"],
+    77→    queryFn: () => api.stats(),
+    78→    refetchInterval: 8000,
+    79→  });
+    80→  const departments = statsQuery.data?.stats.departments ?? [];
+    81→
+    82→  const { data, isLoading, isFetching } = useQuery({
+    83→    queryKey: ["students", debouncedQ, status, dept, sort, page],
+    84→    queryFn: () => api.students({ q: debouncedQ, status, dept, sort, page, pageSize: 12 }),
+    85→    placeholderData: keepPreviousData,
+    86→    enabled: tab === "students",
+    87→  });
+    88→
+    89→  async function runAction(
+    90→    id: string,
+    91→    action: "checkin" | "uncheckin" | "edit" | "delete",
+    92→    extra?: Record<string, string>
+    93→  ) {
+    94→    setActionBusy(id + action);
+    95→    try {
+    96→      if (action === "delete") {
+    97→        await api.deleteStudent(id);
+    98→        toast({ title: "Record removed", description: "The student record was deleted." });
+    99→      } else {
+   100→        await api.studentAction(id, { action, ...extra });
+   101→        const labels: Record<string, string> = {
+   102→          checkin: "Manual check-in recorded",
+   103→          uncheckin: "Check-in reverted",
+   104→          edit: "Student updated",
+   105→        };
+   106→        toast({ title: labels[action] ?? "Done", description: "Audit log updated." });
+   107→      }
+   108→      await qc.invalidateQueries({ queryKey: ["students"] });
+   109→      await qc.invalidateQueries({ queryKey: ["stats"] });
+   110→    } catch (err) {
+   111→      toast({
+   112→        title: "Action failed",
+   113→        description: err instanceof Error ? err.message : "Unknown error",
+   114→        variant: "destructive",
+   115→      });
+   116→    } finally {
+   117→      setActionBusy(null);
+   118→      setEditing(null);
+   119→      setDeleting(null);
+   120→    }
+   121→  }
+   122→
+   123→  const students = data?.students ?? [];
+   124→  const totalPages = data?.totalPages ?? 1;
+   125→
+   126→  // clear keyboard highlight whenever the result set changes
+   127→  useEffect(() => {
+   128→    setHighlighted(null);
+   129→  }, [debouncedQ, status, dept, sort, page, tab]);
+   130→
+   131→  // keep the highlighted row in view
+   132→  useEffect(() => {
+   133→    if (highlighted === null) return;
+   134→    const s = students[highlighted];
+   135→    if (!s) return;
+   136→    rowRefs.current.get(s.id)?.scrollIntoView({ block: "nearest" });
+   137→  }, [highlighted, students]);
+   138→
+   139→  const runActionRef = useRef(runAction);
+   140→  runActionRef.current = runAction;
+   141→
+   142→  // keyboard navigation: ↑/↓ move · Enter = manual check-in · Esc clears
+   143→  useEffect(() => {
+   144→    if (tab !== "students") return;
+   145→    function onKey(e: KeyboardEvent) {
+   146→      const target = e.target as HTMLElement | null;
+   147→      if (
+   148→        target &&
+   149→        (target.tagName === "INPUT" ||
+   150→          target.tagName === "TEXTAREA" ||
+   151→          target.tagName === "SELECT" ||
+   152→          target.isContentEditable)
+   153→      ) {
+   154→        return;
+   155→      }
+   156→      if (document.querySelector("[role='dialog']")) return;
+   157→      const list = data?.students ?? [];
+   158→      if (list.length === 0) return;
+   159→
+   160→      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+   161→        e.preventDefault();
+   162→        setHighlighted((h) => {
+   163→          const base = h === null ? (e.key === "ArrowDown" ? -1 : 0) : h;
+   164→          const next = e.key === "ArrowDown" ? Math.min(base + 1, list.length - 1) : Math.max(base - 1, 0);
+   165→          return next;
+   166→        });
+   167→      } else if (e.key === "Escape") {
+   168→        setHighlighted(null);
+   169→      }
+   170→    }
+   171→    window.addEventListener("keydown", onKey);
+   172→    return () => window.removeEventListener("keydown", onKey);
+   173→  }, [tab, data]);
+   174→
+   175→  // Enter-to-check-in lives in its own effect so it always sees fresh state
+   176→  useEffect(() => {
+   177→    if (tab !== "students") return;
+   178→    if (highlighted === null) return;
+   179→    function onEnter(e: KeyboardEvent) {
+   180→      if (e.key !== "Enter") return;
+   181→      const target = e.target as HTMLElement | null;
+   182→      if (
+   183→        target &&
+   184→        (target.tagName === "INPUT" ||
+   185→          target.tagName === "TEXTAREA" ||
+   186→          target.tagName === "SELECT" ||
+   187→          target.isContentEditable)
+   188→      ) {
+   189→        return;
+   190→      }
+   191→      if (document.querySelector("[role='dialog']")) return;
+   192→      const s = data?.students[highlighted as number];
+   193→      if (!s) return;
+   194→      if (s.checkedIn) {
+   195→        playFeedback("already");
+   196→        toast({
+   197→          title: `${s.name} is already checked in`,
+   198→          description: `${s.studentId} · ${timeFmt(s.checkinAt)}`,
+   199→        });
+   200→      } else {
+   201→        void runActionRef.current(s.id, "checkin");
+   202→      }
+   203→    }
+   204→    window.addEventListener("keydown", onEnter);
+   205→    return () => window.removeEventListener("keydown", onEnter);
+   206→  }, [tab, highlighted, data, toast]);
+   207→
+   208→  const quickCheckin = useMutation({
+   209→    mutationFn: (id: string) => api.quickCheckin(id),
+   210→    onSuccess: (res) => {
+   211→      if (res.result === "GRANTED") playFeedback("granted");
+   212→      else if (res.result === "ALREADY_CHECKED_IN") playFeedback("already");
+   213→      else playFeedback("denied");
+   214→      setQuickId("");
+   215→      void qc.invalidateQueries({ queryKey: ["students"] });
+   216→      void qc.invalidateQueries({ queryKey: ["stats"] });
+   217→    },
+   218→    onError: () => playFeedback("denied"),
+   219→  });
+   220→
+   221→  const quickResult = quickCheckin.data;
+   222→  const quickOk = quickResult?.result === "GRANTED";
+   223→  const quickWarn = quickResult?.result === "ALREADY_CHECKED_IN";
+   224→
+   225→  function submitQuick(e: React.FormEvent) {
+   226→    e.preventDefault();
+   227→    const id = quickId.trim();
+   228→    if (!id || quickCheckin.isPending) return;
+   229→    quickCheckin.mutate(id);
+   230→  }
+   231→
+   232→  return (
+   233→    <div className="space-y-5">
+   234→      {/* tabs */}
+   235→      <div className="flex w-full max-w-xs rounded-xl border border-purple-500/25 bg-[#0b0514]/70 p-1">
+   236→        {(
+   237→          [
+   238→            { id: "students", label: "All Students", icon: Users },
+   239→            ...(isAdmin ? [{ id: "import" as const, label: "Import", icon: BadgeCheck }] : []),
+   240→          ] as const
+   241→        ).map((t) => (
+   242→          <button
+   243→            key={t.id}
+   244→            onClick={() => setTab(t.id)}
+   245→            className={cn(
+   246→              "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all",
+   247→              tab === t.id
+   248→                ? "bg-gradient-to-r from-purple-600/40 to-purple-500/20 text-purple-50 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)]"
+   249→                : "text-purple-200/55 hover:text-purple-100"
+   250→            )}
+   251→          >
+   252→            <t.icon className="h-3.5 w-3.5" />
+   253→            {t.label}
+   254→          </button>
+   255→        ))}
+   256→      </div>
+   257→
+   258→      {tab === "import" ? (
+   259→        <ImportWizard onDone={() => setTab("students")} />
+   260→      ) : (
+   261→        <>
+   262→          {/* quick check-in — entry desk pad */}
+   263→          <motion.div
+   264→            initial={{ opacity: 0, y: 12 }}
+   265→            animate={{ opacity: 1, y: 0 }}
+   266→            className="obs-card rounded-2xl border-purple-400/25 p-4"
+   267→          >
+   268→            <div className="flex items-center gap-2.5">
+   269→              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500/30 to-violet-800/30">
+   270→                <Zap className="h-4 w-4 text-purple-300" />
+   271→              </span>
+   272→              <div className="min-w-0 flex-1">
+   273→                <p className="text-sm font-semibold text-purple-100">Quick check-in</p>
+   274→                <p className="text-[11px] text-purple-200/50">Walk-up juniors with a dead phone — type their ID and hit enter.</p>
+   275→              </div>
+   276→            </div>
+   277→            <form onSubmit={submitQuick} className="mt-3 flex flex-col gap-2 sm:flex-row">
+   278→              <Input
+   279→                value={quickId}
+   280→                onChange={(e) => setQuickId(e.target.value.toUpperCase())}
+   281→                placeholder="e.g. OBS26-041"
+   282→                aria-label="Student ID for quick check-in"
+   283→                autoComplete="off"
+   284→                spellCheck={false}
+   285→                className="h-11 flex-1 rounded-xl border-purple-500/35 bg-[#0b0517]/90 font-mono text-sm font-semibold uppercase tracking-[0.12em] text-purple-50 placeholder:font-sans placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-purple-200/25"
+   286→              />
+   287→              <Button
+   288→                type="submit"
+   289→                disabled={!quickId.trim() || quickCheckin.isPending}
+   290→                className="obs-glow-btn h-11 rounded-xl bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 px-6 text-sm font-semibold text-white"
+   291→              >
+   292→                {quickCheckin.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgePlus className="mr-2 h-4 w-4" />}
+   293→                Check in
+   294→              </Button>
+   295→            </form>
+   296→            <AnimatePresence>
+   297→              {quickResult && (
+   298→                <motion.div
+   299→                  key={quickResult.message}
+   300→                  initial={{ opacity: 0, y: -6 }}
+   301→                  animate={{ opacity: 1, y: 0 }}
+   302→                  exit={{ opacity: 0 }}
+   303→                  className={cn(
+   304→                    "mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed",
+   305→                    quickOk
+   306→                      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-200"
+   307→                      : quickWarn
+   308→                        ? "border-amber-400/35 bg-amber-500/10 text-amber-200"
+   309→                        : "border-rose-400/35 bg-rose-500/10 text-rose-200"
+   310→                  )}
+   311→                  role="status"
+   312→                >
+   313→                  {quickOk ? (
+   314→                    <BadgePlus className="mt-0.5 h-4 w-4 shrink-0" />
+   315→                  ) : quickWarn ? (
+   316→                    <BadgeMinus className="mt-0.5 h-4 w-4 shrink-0" />
+   317→                  ) : (
+   318→                    <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+   319→                  )}
+   320→                  <div>
+   321→                    <p className="font-semibold">{quickResult.student?.name ?? quickResult.result}</p>
+   322→                    <p className="opacity-80">{quickResult.message}</p>
+   323→                  </div>
+   324→                </motion.div>
+   325→              )}
+   326→            </AnimatePresence>
+   327→          </motion.div>
+   328→
+   329→          {/* filter bar */}
+   330→          <div className="obs-card flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center">
+   331→            <div className="relative flex-1">
+   332→              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-300/50" />
+   333→              <Input
+   334→                value={q}
+   335→                onChange={(e) => setQ(e.target.value)}
+   336→                placeholder="Search ID, name, mobile, email…"
+   337→                className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 pl-9 text-sm text-purple-50 placeholder:text-purple-200/25 focus:border-purple-400/70"
+   338→              />
+   339→              {isFetching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-purple-400/60" />}
+   340→            </div>
+   341→            <div className="grid grid-cols-3 gap-2 sm:w-auto sm:flex">
+   342→              <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+   343→                <SelectTrigger className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100 sm:w-[130px]">
+   344→                  <SelectValue placeholder="Status" />
+   345→                </SelectTrigger>
+   346→                <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
+   347→                  <SelectItem value="ALL">All statuses</SelectItem>
+   348→                  <SelectItem value="CHECKED_IN">Checked in</SelectItem>
+   349→                  <SelectItem value="NOT_ARRIVED">Not arrived</SelectItem>
+   350→                </SelectContent>
+   351→              </Select>
+   352→              <Select value={dept} onValueChange={(v) => { setDept(v); setPage(1); }}>
+   353→                <SelectTrigger className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100 sm:w-[120px]">
+   354→                  <SelectValue placeholder="Dept" />
+   355→                </SelectTrigger>
+   356→                <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
+   357→                  <SelectItem value="ALL">All depts</SelectItem>
+   358→                  {departments.map((d) => (
+   359→                    <SelectItem key={d} value={d}>{d}</SelectItem>
+   360→                  ))}
+   361→                </SelectContent>
+   362→              </Select>
+   363→              <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
+   364→                <SelectTrigger className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/80 text-xs text-purple-100 sm:w-[125px]">
+   365→                  <SelectValue placeholder="Sort" />
+   366→                </SelectTrigger>
+   367→                <SelectContent className="border-purple-500/30 bg-[#0e0819] text-purple-100">
+   368→                  <SelectItem value="recent">Recent activity</SelectItem>
+   369→                  <SelectItem value="name">Name A–Z</SelectItem>
+   370→                  <SelectItem value="id">Student ID</SelectItem>
+   371→                </SelectContent>
+   372→              </Select>
+   373→            </div>
+   374→          </div>
+   375→
+   376→          {/* table */}
+   377→          <div className="obs-card overflow-hidden rounded-2xl">
+   378→            <div className="obs-scrollbar overflow-x-auto">
+   379→              <table className="w-full min-w-[760px] text-sm">
+   380→                <thead>
+   381→                  <tr className="border-b border-purple-500/20 bg-purple-500/5 text-left text-[10px] font-bold uppercase tracking-[0.16em] text-purple-200/60">
+   382→                    <th className="px-4 py-3.5">Student</th>
+   383→                    <th className="px-4 py-3.5">ID</th>
+   384→                    <th className="px-4 py-3.5">Dept</th>
+   385→                    <th className="px-4 py-3.5">Status</th>
+   386→                    <th className="px-4 py-3.5">Check-in</th>
+   387→                    <th className="px-4 py-3.5">Tries</th>
+   388→                    <th className="px-4 py-3.5 text-right">Actions</th>
+   389→                  </tr>
+   390→                </thead>
+   391→                <tbody>
+   392→                  {isLoading ? (
+   393→                    Array.from({ length: 6 }).map((_, i) => (
+   394→                      <tr key={i} className="border-b border-purple-500/10">
+   395→                        {Array.from({ length: 7 }).map((_, j) => (
+   396→                          <td key={j} className="px-4 py-3.5">
+   397→                            <Skeleton className="h-5 w-full bg-purple-500/10" />
+   398→                          </td>
+   399→                        ))}
+   400→                      </tr>
+   401→                    ))
+   402→                  ) : students.length === 0 ? (
+   403→                    <tr>
+   404→                      <td colSpan={7} className="px-4 py-14 text-center text-sm text-purple-200/40">
+   405→                        <Users className="mx-auto mb-3 h-9 w-9 text-purple-300/25" />
+   406→                        {debouncedQ || status !== "ALL" || dept !== "ALL"
+   407→                          ? "No students match these filters."
+   408→                          : "No students yet — import the registration sheet from the Import tab."}
+   409→                      </td>
+   410→                    </tr>
+   411→                  ) : (
+   412→                    students.map((s, i) => (
+   413→                      <motion.tr
+   414→                        key={s.id}
+   415→                        ref={(el) => {
+   416→                          if (el) rowRefs.current.set(s.id, el);
+   417→                          else rowRefs.current.delete(s.id);
+   418→                        }}
+   419→                        initial={{ opacity: 0 }}
+   420→                        animate={{ opacity: 1 }}
+   421→                        className={cn(
+   422→                          "obs-row-hover border-b border-purple-500/10",
+   423→                          highlighted === i &&
+   424→                            "bg-purple-500/[0.13] shadow-[inset_3px_0_0_rgba(168,85,247,0.9)]"
+   425→                        )}
+   426→                        data-kbd-highlight={highlighted === i ? "true" : undefined}
+   427→                      >
+   428→                        <td className="px-4 py-3">
+   429→                          <div className="flex items-center gap-2.5">
+   430→                            <span className={cn(
+   431→                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+   432→                              s.checkedIn
+   433→                                ? "bg-gradient-to-br from-purple-500/40 to-violet-800/40 text-purple-100"
+   434→                                : "bg-purple-500/10 text-purple-200/60"
+   435→                            )}>
+   436→                              {s.name.charAt(0).toUpperCase()}
+   437→                            </span>
+   438→                            <div className="min-w-0">
+   439→                              <p className="truncate font-semibold text-purple-50">{s.name}</p>
+   440→                              {s.mobile && <p className="text-[11px] text-purple-300/50">{s.mobile}</p>}
+   441→                            </div>
+   442→                          </div>
+   443→                        </td>
+   444→                        <td className="px-4 py-3 font-mono text-xs text-purple-200/80">{s.studentId}</td>
+   445→                        <td className="px-4 py-3">
+   446→                          <span className="rounded-md bg-purple-500/10 px-2 py-1 text-[11px] font-medium text-purple-200/80">
+   447→                            {s.department || "—"}
+   448→                          </span>
+   449→                        </td>
+   450→                        <td className="px-4 py-3">
+   451→                          {s.checkedIn ? (
+   452→                            <span className="flex w-fit items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
+   453→                              <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-emerald-400" /> In
+   454→                            </span>
+   455→                          ) : (
+   456→                            <span className="rounded-full border border-purple-500/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-purple-200/50">
+   457→                              Pending
+   458→                            </span>
+   459→                          )}
+   460→                        </td>
+   461→                        <td className="px-4 py-3">
+   462→                          <span className="flex items-center gap-1 text-xs text-purple-200/60">
+   463→                            <Clock className="h-3 w-3 text-purple-300/40" />
+   464→                            {s.checkinAt ? timeFmt(s.checkinAt) : "—"}
+   465→                          </span>
+   466→                        </td>
+   467→                        <td className="px-4 py-3 text-center font-mono text-xs text-purple-200/60">{s.attempts || 0}</td>
+   468→                        <td className="px-4 py-3">
+   469→                          <div className="flex items-center justify-end gap-1.5">
+   470→                            {!s.checkedIn && (
+   471→                              <Button
+   472→                                size="icon"
+   473→                                onClick={() => runAction(s.id, "checkin")}
+   474→                                disabled={actionBusy === s.id + "checkin"}
+   475→                                title="Manual check-in"
+   476→                                aria-label={`Manually check in ${s.name}`}
+   477→                                className="h-8 w-8 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/25"
+   478→                              >
+   479→                                {actionBusy === s.id + "checkin" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+   480→                              </Button>
+   481→                            )}
+   482→                            {s.checkedIn && isAdmin && (
+   483→                              <Button
+   484→                                size="icon"
+   485→                                onClick={() => runAction(s.id, "uncheckin")}
+   486→                                disabled={actionBusy === s.id + "uncheckin"}
+   487→                                title="Revert check-in"
+   488→                                aria-label={`Revert check-in for ${s.name}`}
+   489→                                className="h-8 w-8 rounded-lg border border-amber-400/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/25"
+   490→                              >
+   491→                                {actionBusy === s.id + "uncheckin" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
+   492→                              </Button>
+   493→                            )}
+   494→                            {isAdmin && (
+   495→                              <>
+   496→                                <Button
+   497→                                  size="icon"
+   498→                                  onClick={() =>
+   499→                                    setEditing({
+   500→                                      id: s.id,
+   501→                                      name: s.name,
+   502→                                      mobile: s.mobile ?? "",
+   503→                                      department: s.department ?? "",
+   504→                                      email: s.email ?? "",
+   505→                                      year: s.year ?? "",
+   506→                                    })
+   507→                                  }
+   508→                                  title="Edit"
+   509→                                  aria-label={`Edit ${s.name}`}
+   510→                                  className="h-8 w-8 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-200 hover:bg-purple-500/25"
+   511→                                >
+   512→                                  <Pencil className="h-3.5 w-3.5" />
+   513→                                </Button>
+   514→                                <Button
+   515→                                  size="icon"
+   516→                                  onClick={() => setDeleting({ id: s.id, name: s.name })}
+   517→                                  title="Delete"
+   518→                                  aria-label={`Delete ${s.name}`}
+   519→                                  className="h-8 w-8 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/25"
+   520→                                >
+   521→                                  <Trash2 className="h-3.5 w-3.5" />
+   522→                                </Button>
+   523→                              </>
+   524→                            )}
+   525→                          </div>
+   526→                        </td>
+   527→                      </motion.tr>
+   528→                    ))
+   529→                  )}
+   530→                </tbody>
+   531→              </table>
+   532→            </div>
+   533→
+   534→            {/* pagination */}
+   535→            <div className="flex items-center justify-between gap-3 border-t border-purple-500/15 px-4 py-3">
+   536→              <p className="text-xs text-purple-200/50">
+   537→                {data ? `${(data.page - 1) * data.pageSize + (data.students.length || 0)} of ${data.total} records` : "…"}
+   538→                <span className="ml-3 hidden items-center gap-1.5 text-[10px] text-purple-200/35 lg:inline-flex">
+   539→                  <kbd className="obs-kbd">↑</kbd>
+   540→                  <kbd className="obs-kbd">↓</kbd> navigate
+   541→                  <kbd className="obs-kbd ml-1.5">↵</kbd> quick check-in
+   542→                  <kbd className="obs-kbd ml-1.5">esc</kbd> clear
+   543→                </span>
+   544→              </p>
+   545→              <div className="flex items-center gap-2">
+   546→                <Button
+   547→                  size="icon"
+   548→                  variant="outline"
+   549→                  disabled={page <= 1}
+   550→                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+   551→                  className="h-8 w-8 rounded-lg border-purple-500/30 text-purple-200 disabled:opacity-30"
+   552→                >
+   553→                  <ChevronLeft className="h-4 w-4" />
+   554→                </Button>
+   555→                <span className="font-mono text-xs text-purple-200/70">
+   556→                  {page}/{Math.max(totalPages, 1)}
+   557→                </span>
+   558→                <Button
+   559→                  size="icon"
+   560→                  variant="outline"
+   561→                  disabled={page >= totalPages}
+   562→                  onClick={() => setPage((p) => p + 1)}
+   563→                  className="h-8 w-8 rounded-lg border-purple-500/30 text-purple-200 disabled:opacity-30"
+   564→                >
+   565→                  <ChevronRight className="h-4 w-4" />
+   566→                </Button>
+   567→              </div>
+   568→            </div>
+   569→          </div>
+   570→        </>
+   571→      )}
+   572→
+   573→      {/* edit dialog */}
+   574→      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+   575→        <DialogContent className="obs-card border-purple-500/40 sm:max-w-md">
+   576→          <DialogHeader>
+   577→            <DialogTitle className="font-display text-purple-50">Edit Student</DialogTitle>
+   578→            <DialogDescription className="text-purple-200/60">Correct registration details. Logged to audit trail.</DialogDescription>
+   579→          </DialogHeader>
+   580→          {editing && (
+   581→            <div className="grid gap-3.5 py-2">
+   582→              {(
+   583→                [
+   584→                  ["name", "Name"],
+   585→                  ["mobile", "Mobile"],
+   586→                  ["department", "Department"],
+   587→                  ["email", "Email"],
+   588→                  ["year", "Year"],
+   589→                ] as const
+   590→              ).map(([key, label]) => (
+   591→                <div key={key}>
+   592→                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-purple-200/60">{label}</label>
+   593→                  <Input
+   594→                    value={editing[key]}
+   595→                    onChange={(e) => setEditing({ ...editing, [key]: e.target.value })}
+   596→                    className="h-10 rounded-xl border-purple-500/30 bg-[#0b0517]/90 text-sm text-purple-50 focus:border-purple-400/70"
+   597→                  />
+   598→                </div>
+   599→              ))}
+   600→            </div>
+   601→          )}
+   602→          <DialogFooter>
+   603→            <Button variant="outline" onClick={() => setEditing(null)} className="border-purple-500/30 text-purple-200">Cancel</Button>
+   604→            <Button
+   605→              onClick={() => editing && runAction(editing.id, "edit", { name: editing.name, mobile: editing.mobile, department: editing.department, email: editing.email, year: editing.year })}
+   606→              className="obs-glow-btn bg-gradient-to-r from-violet-700 to-purple-500 text-white hover:brightness-110"
+   607→            >
+   608→              Save changes
+   609→            </Button>
+   610→          </DialogFooter>
+   611→        </DialogContent>
+   612→      </Dialog>
+   613→
+   614→      {/* delete confirm */}
+   615→      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+   616→        <AlertDialogContent className="obs-card border-rose-500/40">
+   617→          <AlertDialogHeader>
+   618→            <AlertDialogTitle className="font-display text-rose-100">Remove record?</AlertDialogTitle>
+   619→            <AlertDialogDescription className="text-purple-200/60">
+   620→              This permanently deletes <span className="font-semibold text-purple-100">{deleting?.name}</span> from the registry. Check-in history audit entries remain.
+   621→            </AlertDialogDescription>
+   622→          </AlertDialogHeader>
+   623→          <AlertDialogFooter>
+   624→            <AlertDialogCancel className="border-purple-500/30 text-purple-200">Keep record</AlertDialogCancel>
+   625→            <AlertDialogAction
+   626→              onClick={() => deleting && runAction(deleting.id, "delete")}
+   627→              className="bg-rose-600 text-white hover:bg-rose-500"
+   628→            >
+   629→              Delete
+   630→            </AlertDialogAction>
+   631→          </AlertDialogFooter>
+   632→        </AlertDialogContent>
+   633→      </AlertDialog>
+   634→    </div>
+   635→  );
+   636→}
+   637→

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, KeyRound, ScanLine, Users } from "lucide-react";
+import { ArrowLeft, KeyRound, Link2, ScanLine, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api-client";
@@ -18,6 +18,7 @@ const ID_RE = /^[A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39}$/;
 
 export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack: () => void }) {
   const [value, setValue] = useState("");
+  const [invitedId, setInvitedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const setVerify = useObsidianStore((s) => s.setVerify);
@@ -33,6 +34,20 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
     const unlock = () => primeAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
     return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  // personal invite link prefill (/#/verify?id=OBS26-xxx)
+  // deferred via rAF: keeps SSR markup stable and satisfies lint (no sync setState in effect)
+  useEffect(() => {
+    const hashQuery = window.location.hash.split("?")[1] ?? "";
+    const invited = new URLSearchParams(hashQuery).get("id");
+    if (!invited || !ID_RE.test(invited.trim())) return;
+    const prefill = invited.trim().toUpperCase();
+    const raf = requestAnimationFrame(() => {
+      setValue(prefill);
+      setInvitedId(prefill);
+    });
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   async function handleSubmit(e?: React.FormEvent) {
@@ -167,6 +182,7 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
                   // mirror the server-side normalization while typing
                   setValue(e.target.value.toUpperCase());
                   if (error) setError(null);
+                  if (invitedId && e.target.value.toUpperCase() !== invitedId) setInvitedId(null);
                 }}
                 placeholder="e.g. OBS26-041"
                 autoFocus
@@ -176,9 +192,21 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
                 disabled={scanning}
                 className="h-14 rounded-xl border-purple-500/35 bg-[#0b0517]/90 text-center font-mono text-lg font-semibold uppercase tracking-[0.2em] text-purple-50 placeholder:text-purple-200/25 placeholder:tracking-normal focus:border-purple-400/80 focus:ring-2 focus:ring-purple-500/30 disabled:opacity-50"
               />
-              <p className="mt-2.5 text-center text-xs text-purple-200/45">
-                Enter the ID you registered with — exactly as on your college ID card.
-              </p>
+              {invitedId && value === invitedId && (
+                <motion.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-emerald-300/90"
+                >
+                  <Link2 className="h-3 w-3" />
+                  Pre-filled from your personal invite — just hit verify
+                </motion.p>
+              )}
+              {!invitedId && (
+                <p className="mt-2.5 text-center text-xs text-purple-200/45">
+                  Enter the ID you registered with — exactly as on your college ID card.
+                </p>
+              )}
             </div>
 
             {error && (

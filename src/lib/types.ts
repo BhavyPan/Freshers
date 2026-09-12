@@ -74,6 +74,12 @@ export interface StudentsResponse {
   students: StudentRow[];
 }
 
+export interface StudentProfileResponse {
+  ok: boolean;
+  student: StudentRow;
+  history: AuditRow[];
+}
+
 export interface ImportMapping {
   studentId: number | null;
   name: number | null;
