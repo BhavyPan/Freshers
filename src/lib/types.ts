@@ -145,6 +145,22 @@ export interface PublicPulseResponse {
   recent: { id: string; firstName: string; lastInitial: string; department: string | null; at: string }[];
 }
 
+export interface LookupMatch {
+  studentId: string;
+  name: string;
+  department: string | null;
+  year: string | null;
+  checkedIn: boolean;
+  mobileMasked: string;
+}
+
+export interface LookupResponse {
+  ok: boolean;
+  found?: boolean;
+  message?: string;
+  matches?: LookupMatch[];
+}
+
 export interface QuickCheckinResponse {
   ok: boolean;
   result: "GRANTED" | "ALREADY_CHECKED_IN" | "DENIED";
@@ -171,6 +187,14 @@ export interface ActivityResponse {
     checkins: number;
     reversals: number;
     edits: number;
+    lastAt: string | null;
+  }[];
+  leaderboard: {
+    actor: string;
+    displayName: string | null;
+    role: string | null;
+    entries: number; // attributed check-ins, whole event
+    grants24h: number; // manual grants in the recent window
     lastAt: string | null;
   }[];
   windowHours: number;

@@ -242,3 +242,36 @@ Stage Summary:
 - OBSIDIAN '26 now: 8 spec pages + 21 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, announcements + analytics, kiosk mode + attract, QR share, keyboard nav, profile drawer + timeline, invite links + pass PNG, entry heatmap, pass sheets PDF, announcement scheduling, desk attribution, re-broadcast history, dept goals + confetti, mobile pass share).
 - Risks: none known. Note: obs-goals-done is per-device — a dept re-completing after a revert re-celebrates on devices that never saw it (acceptable, celebration is per-device by design).
 - Next-round ideas: kiosk print receipt (ESC/POS two-line output), scheduled audit digest email, student self-service "forgot ID" lookup by mobile, dark/light e-ticket template, volunteer leaderboard from desk attribution.
+
+---
+Task ID: 9 (cron webDevReview round 7)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + self-service Forgot-ID lookup + desk leaderboard + mobile/UX fixes
+
+Work Log:
+QA & status:
+- Reviewed worklog (round 6 complete, system stable) + dev.log (all 200s) → full browser QA: landing (3D + banner + 25/83 counter + ticker), verify→GRANTED (OBS26-033, then reverted via audit-logged uncheckin), kiosk, all 4 admin sections — zero console errors → chose feature development.
+
+New features:
+1. FORGOT-ID SELF-SERVICE LOOKUP (flagship): new POST /api/public/lookup — student types the registered mobile → entry ID revealed. Privacy & abuse stance: exact-match on the stored mobile (digit-normalized tail so "+91 98100 00001" works), aggressive 5/min/IP rate limit, every lookup audited (LOOKUP_FOUND / LOOKUP_NONE with masked "mobile ••• 0001" raw input — no digits echoed), response limited to 5 matches with masked mobile for confirmation. New ForgotIdDialog on VerifyView ("Forgot your ID?" link under the form): themed glass dialog, tel input with digit cleaning, per-match result cards (avatar, name, ALREADY INSIDE amber / READY TO ENTER emerald badge, ID pill, dept/year, masked mobile), "Use this ID" fills the verify form + closes + refocuses the input (focus-return via ref + rAF), Copy button, themed not-found (amber guidance) and 429 states. Component remounts via key on open (no setState-in-effect — lint-safe).
+2. DESK LEADERBOARD (flagship): activity API now returns leaderboard — per-operator whole-event standings (entries attributed via checkinBy + manual grants in the recent window, SELF excluded, AdminUser displayName/role joined). ReportsView gains "Desk Leaderboard — operator standings" card: gold/silver/bronze medal gradient chips (glow on #1), role chips (ADMIN purple / VOLUNTEER teal), "+N recent" emerald chips, amber animated progress bars relative to leader, score = entries + grants24h, last-activity time. Verified: admin #1 (2 entries + 10 grants = 12), volunteer #2 (1+1 = 2).
+3. AUDIT TRAIL INTEGRATION: lookup rows render with teal LOOKUP FOUND / slate LOOKUP NONE tones; new "ID lookups (any)" filter option (backend alias LOOKUPS → [LOOKUP_FOUND, LOOKUP_NONE]).
+
+Bug fixed:
+- EVENT_CLOSED was missing from the audit route's RESULT_VALUES — the "Gate paused/closed" filter silently returned ALL rows. Added to RESULT_VALUES; filter now returns exactly the 2 closed-gate events.
+
+Styling details:
+- Kiosk idle screen: "Forgot your ID? Ask at the registration desk — or look it up on the verify page" hint line.
+- Leaderboard mobile fix (QA-found overflow): grid item overflowed 390px viewport (min-width:auto classic) → min-w-0 on rows + shrink-0 score column + flex-wrap chip row with min-w-14 name so the operator name stays visible; label truncates with tooltip.
+- VerifyView forgot-ID link: hover underline glow + CircleHelp icon, consistent with design system.
+
+Verification:
+- bun run lint PASS · lookup round-trips verified via curl (+91 format → found w/ masked mobile; unknown → not-found; 6 rapid calls → 429 w/ Retry-After; after cooldown → 200) · leaderboard + LOOKUPS/EVENT_CLOSED filters verified via curl AND browser · dialog flow verified on desktop 1280 + mobile 390 (open → search → found → Use this ID → form prefilled OBS26-001 + focused) · all 7 routes toured, console clean.
+- Transient note: one-off "TypeError: Invalid URL (input '//')" in dev.log during route tour — not reproducible (5× retry clean), all requests 200, zero browser errors; classified as Next dev-runtime noise.
+- Data integrity: QA check-in OBS26-033 reverted; excess QA lookup/rate-limit audit rows pruned (kept 1 FOUND + 1 NONE + 1 RATE_LIMITED as feature demos); 83 registered / 25 in / gate OPEN / demo announcement still LIVE.
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 23 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, announcements + analytics, kiosk mode + attract, QR share, keyboard nav, profile drawer + timeline, invite links + pass PNG, entry heatmap, pass sheets PDF, announcement scheduling, desk attribution, re-broadcast history, dept goals + confetti, mobile pass share, forgot-ID lookup, desk leaderboard).
+- Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
+- Risks: lookup loads all students w/ mobile for digit-normalized matching — fine at event scale (hundreds); would want a normalized mobile column if imports grow to 10k+. Old audit rows actor=null render as SELF (accurate pre-feature).
+- Next-round ideas: per-student printable receipt after check-in (browser print), WhatsApp share of pass PNG via canvas blob (finish mobile deep-links), volunteer leaderboard export, scheduled audit digest email, "who's inside" public wait-time estimate on landing.

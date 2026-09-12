@@ -9,6 +9,7 @@ import type {
   ImportCommitResponse,
   ImportPreviewResponse,
   LoginResponse,
+  LookupResponse,
   PublicPulseResponse,
   QrResponse,
   QuickCheckinResponse,
@@ -157,6 +158,12 @@ export const api = {
   qrRegenerate: () => request<QrResponse>("/api/qr/regenerate", { method: "POST" }),
 
   pulse: () => request<PublicPulseResponse>("/api/public/pulse"),
+
+  lookup: (mobile: string) =>
+    request<LookupResponse>("/api/public/lookup", {
+      method: "POST",
+      body: JSON.stringify({ mobile }),
+    }),
 
   setEventStatus: (status: EventStatus) =>
     request<EventStatusResponse>("/api/admin/event", {

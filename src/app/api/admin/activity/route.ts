@@ -29,7 +29,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     )
     const since = new Date(Date.now() - windowHours * 60 * 60 * 1000)
 
-    const [byOperator, actions] = await Promise.all([
+    const [byOperator, actions, admins] = await Promise.all([
       db.student.groupBy({
         by: ['checkinBy'],
         where: { checkedIn: true },
@@ -42,6 +42,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         _count: { _all: true },
         _max: { createdAt: true },
       }),
+      db.adminUser.findMany({ select: { username: true, displayName: true, role: true } }),
     ])
 
     const deskMap = new Map<string, { actor: string; label: string; entries: number; lastAt: Date | null }>()
@@ -60,6 +61,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     const desks = [...deskMap.values()]
       .map((e) => ({ ...e, lastAt: e.lastAt ? e.lastAt.toISOString() : null }))
       .sort((a, b) => b.entries - a.entries)
+    // raw desk rows (Date objects intact) for leaderboard computation below
+    const deskRows = [...deskMap.values()]
 
     const merged = new Map<
       string,
@@ -81,7 +84,40 @@ export async function GET(req: Request): Promise<NextResponse> {
       .map((e) => ({ ...e, lastAt: e.lastAt ? e.lastAt.toISOString() : null }))
       .sort((a, b) => b.checkins + b.reversals + b.edits - (a.checkins + a.reversals + a.edits))
 
-    const payload: ActivityResponse = { ok: true, desks, manualActions, windowHours }
+    // ---- desk leaderboard (whole-event operator standings) ----------------
+    // score = attributed entries (students currently inside, checked in by
+    // this operator) + manual grants in the recent window; SELF excluded.
+    const adminMap = new Map(admins.map((a) => [a.username, a]))
+    const board = new Map<
+      string,
+      { actor: string; displayName: string | null; role: string | null; entries: number; grants24h: number; lastAt: Date | null }
+    >()
+    for (const d of deskRows) {
+      if (d.actor === 'SELF') continue
+      const info = adminMap.get(d.actor)
+      const entry =
+        board.get(d.actor) ??
+        { actor: d.actor, displayName: info?.displayName ?? null, role: info?.role ?? null, entries: 0, grants24h: 0, lastAt: null }
+      entry.entries += d.entries
+      if (d.lastAt && (!entry.lastAt || d.lastAt > entry.lastAt)) entry.lastAt = d.lastAt
+      board.set(d.actor, entry)
+    }
+    for (const m of manualActions) {
+      if (m.checkins <= 0) continue
+      const info = adminMap.get(m.actor)
+      const entry =
+        board.get(m.actor) ??
+        { actor: m.actor, displayName: info?.displayName ?? null, role: info?.role ?? null, entries: 0, grants24h: 0, lastAt: null }
+      entry.grants24h += m.checkins
+      const at = m.lastAt ? new Date(m.lastAt) : null
+      if (at && (!entry.lastAt || at > entry.lastAt)) entry.lastAt = at
+      board.set(m.actor, entry)
+    }
+    const leaderboard = [...board.values()]
+      .map((e) => ({ ...e, lastAt: e.lastAt ? e.lastAt.toISOString() : null }))
+      .sort((a, b) => b.entries + b.grants24h - (a.entries + a.grants24h) || b.grants24h - a.grants24h)
+
+    const payload: ActivityResponse = { ok: true, desks, manualActions, leaderboard, windowHours }
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
     return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })

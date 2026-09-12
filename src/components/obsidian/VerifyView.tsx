@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, KeyRound, Link2, ScanLine, Users } from "lucide-react";
+import { ArrowLeft, CircleHelp, KeyRound, Link2, ScanLine, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api-client";
@@ -13,6 +13,7 @@ import type { VerifyResponse } from "@/lib/types";
 import { ScanningOverlay } from "./ScanningOverlay";
 import { ObsidianLogo } from "./ObsidianLogo";
 import { AnnouncementBanner } from "./AnnouncementBanner";
+import { ForgotIdDialog } from "./ForgotIdDialog";
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39}$/;
 
@@ -21,6 +22,8 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
   const [invitedId, setInvitedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const idInputRef = useRef<HTMLInputElement | null>(null);
   const setVerify = useObsidianStore((s) => s.setVerify);
   const { data: pulse } = useQuery({
     queryKey: ["pulse"],
@@ -177,6 +180,7 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
               </label>
               <Input
                 id="student-id"
+                ref={idInputRef}
                 value={value}
                 onChange={(e) => {
                   // mirror the server-side normalization while typing
@@ -229,6 +233,16 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
               {scanning ? "Verifying…" : "Verify & Check In"}
             </Button>
           </form>
+
+          {/* forgot-ID self-service */}
+          <button
+            type="button"
+            onClick={() => setLookupOpen(true)}
+            className="mx-auto mt-4 flex items-center gap-1.5 text-xs font-medium text-purple-200/55 underline-offset-4 transition-colors hover:text-purple-100 hover:underline hover:decoration-purple-400/60"
+          >
+            <CircleHelp className="h-3.5 w-3.5" />
+            Forgot your ID? Look it up with your registered mobile
+          </button>
         </motion.div>
 
         <p className="mt-6 text-center text-[11px] leading-relaxed text-purple-200/35">
@@ -250,6 +264,26 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
           </motion.p>
         )}
       </main>
+
+      <ForgotIdDialog
+        key={lookupOpen ? "open" : "closed"}
+        open={lookupOpen}
+        onOpenChange={(v) => {
+          setLookupOpen(v);
+          if (!v) {
+            // hand focus back to the ID field after the dialog closes
+            requestAnimationFrame(() => idInputRef.current?.focus());
+          }
+        }}
+        onUseId={(id) => {
+          setValue(id);
+          setInvitedId(null);
+          setError(null);
+          setLookupOpen(false);
+          playFeedback("tap");
+          requestAnimationFrame(() => idInputRef.current?.focus());
+        }}
+      />
     </div>
   );
 }

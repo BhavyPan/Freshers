@@ -20,6 +20,7 @@ import {
   Search,
   ShieldAlert,
   ScrollText,
+  Trophy,
   Users,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -66,6 +67,8 @@ const RESULT_TONES: Record<string, string> = {
   DENIED: "border-rose-400/40 bg-rose-500/10 text-rose-300",
   RATE_LIMITED: "border-purple-400/30 bg-purple-500/10 text-purple-200",
   EVENT_CLOSED: "border-amber-400/40 bg-amber-500/10 text-amber-200",
+  LOOKUP_FOUND: "border-teal-400/30 bg-teal-500/10 text-teal-300",
+  LOOKUP_NONE: "border-slate-400/30 bg-slate-500/10 text-slate-300",
 };
 
 function timeFmt(iso: string) {
@@ -209,6 +212,105 @@ export function ReportsView() {
         </div>
       </motion.div>
 
+      {/* desk leaderboard — operator standings */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.24 }}
+        className="obs-card obs-card-hover rounded-2xl border border-amber-400/15 p-5"
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <Trophy className="h-4 w-4 text-amber-300" />
+          <p className="text-sm font-semibold text-purple-100">Desk Leaderboard — operator standings</p>
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-purple-200/50">
+            <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-amber-400" /> live · all event
+          </span>
+        </div>
+        {activityQuery.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 rounded-xl bg-purple-500/10" />
+            ))}
+          </div>
+        ) : !activityQuery.data || activityQuery.data.leaderboard.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-sm text-purple-200/40">
+            <Trophy className="h-7 w-7 text-purple-300/25" />
+            No operator entries yet — the board lights up with the first desk check-in.
+          </div>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {activityQuery.data.leaderboard.map((op, i) => {
+              const top = activityQuery.data?.leaderboard[0];
+              const topScore = Math.max((top?.entries ?? 0) + (top?.grants24h ?? 0), 1);
+              const score = op.entries + op.grants24h;
+              const pct = Math.max(6, Math.round((score / topScore) * 100));
+              const medal =
+                i === 0
+                  ? "bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-600 text-amber-950 shadow-[0_0_16px_rgba(251,191,36,0.35)]"
+                  : i === 1
+                    ? "bg-gradient-to-br from-slate-100 via-slate-300 to-slate-500 text-slate-900"
+                    : i === 2
+                      ? "bg-gradient-to-br from-orange-200 via-orange-400 to-orange-700 text-orange-950"
+                      : "border border-purple-500/30 bg-purple-500/10 text-purple-200";
+              const isAdmin = op.role === "ADMIN";
+              return (
+                <div
+                  key={op.actor}
+                  className="obs-row-hover flex min-w-0 items-center gap-3 rounded-xl border border-amber-400/10 bg-[#0b0616]/70 px-3.5 py-2.5"
+                >
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black tabular-nums",
+                      medal
+                    )}
+                    title={`Rank #${i + 1}`}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="min-w-14 truncate text-sm font-semibold text-purple-50" title={op.displayName || op.actor}>
+                        {op.displayName || op.actor}
+                      </p>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]",
+                          isAdmin
+                            ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
+                            : "border-teal-400/30 bg-teal-500/10 text-teal-300"
+                        )}
+                      >
+                        {op.role?.toLowerCase() ?? "staff"}
+                      </span>
+                      {op.grants24h > 0 && (
+                        <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-300">
+                          +{op.grants24h} recent
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-amber-500/10">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.7, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] }}
+                        className="h-full rounded-full bg-gradient-to-r from-amber-700 via-amber-400 to-yellow-300"
+                      />
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-display text-lg font-black tabular-nums text-amber-100">{score}</p>
+                    <p className="max-w-28 truncate text-[9px] uppercase tracking-[0.12em] text-purple-200/45" title={`${op.entries} entries${op.lastAt ? ` · last ${format(new Date(op.lastAt), "HH:mm")}` : ""}`}>
+                      {op.entries} entr{op.entries === 1 ? "y" : "ies"}
+                      {op.lastAt ? ` · ${format(new Date(op.lastAt), "HH:mm")}` : ""}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </motion.div>
+
       {/* desk activity attribution */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
@@ -342,6 +444,7 @@ export function ReportsView() {
               <SelectItem value="DENIED">Denied</SelectItem>
               <SelectItem value="RATE_LIMITED">Rate limited</SelectItem>
               <SelectItem value="EVENT_CLOSED">Gate paused/closed</SelectItem>
+              <SelectItem value="LOOKUPS">ID lookups (any)</SelectItem>
             </SelectContent>
           </Select>
           <a

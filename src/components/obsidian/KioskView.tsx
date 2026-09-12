@@ -588,6 +588,11 @@ export function KioskView({ onExit }: { onExit: () => void }) {
                 <span className="h-1 w-1 rounded-full bg-purple-400/50" />
                 <span>Chime + haptic feedback</span>
               </div>
+
+              <p className="mt-3 text-center text-[11px] text-purple-200/35">
+                Forgot your ID? Ask at the registration desk — or look it up on{" "}
+                <span className="font-semibold text-purple-200/55">the verify page</span> with your registered mobile.
+              </p>
             </motion.div>
           )}
         </AnimatePresence>

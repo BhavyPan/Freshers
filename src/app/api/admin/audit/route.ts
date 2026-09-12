@@ -10,10 +10,18 @@ const RESULT_VALUES = [
   'ALREADY_CHECKED_IN',
   'DENIED',
   'RATE_LIMITED',
+  'EVENT_CLOSED',
   'UNCHECKED',
   'DELETED',
   'EDITED',
+  'LOOKUP_FOUND',
+  'LOOKUP_NONE',
 ]
+
+// composite filter: "LOOKUPS" expands to both lookup result kinds
+const RESULT_ALIASES: Record<string, string[]> = {
+  LOOKUPS: ['LOOKUP_FOUND', 'LOOKUP_NONE'],
+}
 
 export async function GET(req: Request): Promise<NextResponse> {
   const guard = await requireAdmin(['ADMIN'])
@@ -45,7 +53,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       const results = resultParam
         .split(',')
         .map((value) => value.trim().toUpperCase())
-        .filter((value) => RESULT_VALUES.includes(value))
+        .flatMap((value) => RESULT_ALIASES[value] ?? (RESULT_VALUES.includes(value) ? [value] : []))
       if (results.length > 0) where.result = { in: results }
     }
     if (studentKey) where.studentKey = studentKey
