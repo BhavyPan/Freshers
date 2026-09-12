@@ -390,10 +390,26 @@ body::-webkit-scrollbar-thumb:hover {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* goal progress bars — travelling sheen while a department chases 100% */
+@keyframes obs-goal-shimmer {
+  0% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(220%); }
+}
+.obs-goal-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4) 50%, transparent);
+  mix-blend-mode: overlay;
+  animation: obs-goal-shimmer 2.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .obs-contour-a, .obs-contour-b, .obs-contour-c, .obs-float, .obs-pulse-glow,
   .obs-spin-slow, .obs-scan-sweep, .obs-live-dot, .obs-shimmer, .obs-spark,
-  .obs-ticker, .obs-attract-title, .obs-attract-sweep, .obs-attract-ring {
+  .obs-ticker, .obs-attract-title, .obs-attract-sweep, .obs-attract-ring,
+  .obs-goal-shimmer::after {
     animation: none !important;
   }
 }

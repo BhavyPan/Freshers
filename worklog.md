@@ -216,3 +216,29 @@ Stage Summary:
 - OBSIDIAN '26 now: 8 spec pages + 18 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, announcements + analytics, kiosk mode + attract, QR share, keyboard nav, profile drawer + timeline, invite links + pass PNG, entry heatmap, pass sheets PDF, announcement scheduling, desk attribution).
 - Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER). Kiosk public at #/kiosk.
 - Risks: none known. Old audit rows have actor=null (pre-feature) — render as "SELF", accurate. Next-round ideas: WhatsApp share of pass PNG via canvas blob on mobile, announcement quick re-broadcast history, per-dept fill-rate goals w/ confetti on 100%, kiosk two-line receipt printer output, scheduled digest email of audit CSV.
+
+---
+Task ID: 8 (cron webDevReview round 6)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + announcement re-broadcast history + department goals w/ confetti + mobile pass-PNG share + styling polish
+
+Work Log:
+QA & status:
+- Reviewed worklog + dev.log (all 200s) → full browser QA (agent-browser): landing (3D + banner + 25/83 counter + ticker), verify → ALREADY CHECKED IN themed result, all 4 admin sections with CORRECT deep links (#/admin/dashboard|registry|qr|reports) — zero console errors anywhere. Note: #/registry etc. intentionally fall through to landing (routes are admin-prefixed) — not a bug.
+- System stable → proceeded to feature development.
+
+New features:
+1. ANNOUNCEMENT RE-BROADCAST HISTORY: EventSettings.announcementHistory (JSON, capped 6, db:push OK, dev server restarted for fresh Prisma client). PATCH /api/admin/event records every broadcast {text, at} — deduped by text so re-posting bumps to top; GET + /api/qr return announcementHistory. QRView editor gains a "RECENT" chip row (History icon): tap loads the text into the draft for one-tap re-posting; chip matching the live notice gets pulsing amber dot + glow; hover tooltip shows original broadcast time; flex-truncate chips (fixed inline-span overflow bug found in QA). Verified: broadcast → history entry, re-broadcast bump ordering, chip → draft fill round-trip.
+2. DEPARTMENT GOALS + CONFETTI (flagship): new dashboard card "Department Goals — race to 100%" — per-dept progress bars (x/y + pct, purple→fuchsia gradient with travelling sheen via new .obs-goal-shimmer), 100% dept flips to emerald glow + 🏆 + "N/7 complete" footer. First-time completion fires a full-screen celebration: SparkleBurst particles + springy amber banner "🎉 ME squad is ALL IN!" + toast + WebAudio chime; per-browser persistence via localStorage (obs-goals-done) so it fires once per dept per device; reduced-motion safe. Verified end-to-end: checked in all 8 pending ME students via API → 11/11 100% + trophy + celebration captured on screenshot (burst frames), then reverted all 8 via audit-logged uncheckin (ME back to 3/11, overall 25/83) and cleared localStorage.
+3. MOBILE PASS-PNG SHARE (Web Share L2): pass-card.ts gains canShareFiles() + sharePassCard() — renders the branded pass, attaches as File to navigator.share (WhatsApp/Mail/etc. on mobile); graceful download fallback on desktop. Profile drawer gains emerald "Share pass…" button (feature-detected, hidden on unsupported devices). Verified: headless Chrome correctly hides it (no Web Share); with stubbed navigator.share the button renders and the full flow returns "Pass ready to share" toast with the pass attached.
+4. STYLING DETAILS: KPI cards hover lift (-translate-y + purple glow shadow); Venue Fill Rate bar gets 25/50/75 milestone ticks; announcement history chips (amber glass, live-dot, flex truncation); goal bars shimmer; Share pass button emerald accent; .obs-goal-shimmer added to prefers-reduced-motion kill list.
+
+Verification:
+- bun run lint PASS · all 7 routes console-error-free · dev.log 100% 200s (non-200 scan clean) · desktop 1280 + mobile 390 both verified for goals card, announcement chips, drawer actions.
+- Data integrity: QA check-ins fully reverted (83 registered / 25 in / ME 3-11); QA test entry scrubbed from announcement history (2 legit entries remain); demo announcement still LIVE; gate OPEN.
+- Credentials unchanged: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER).
+
+Stage Summary:
+- OBSIDIAN '26 now: 8 spec pages + 21 major features (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, announcements + analytics, kiosk mode + attract, QR share, keyboard nav, profile drawer + timeline, invite links + pass PNG, entry heatmap, pass sheets PDF, announcement scheduling, desk attribution, re-broadcast history, dept goals + confetti, mobile pass share).
+- Risks: none known. Note: obs-goals-done is per-device — a dept re-completing after a revert re-celebrates on devices that never saw it (acceptable, celebration is per-device by design).
+- Next-round ideas: kiosk print receipt (ESC/POS two-line output), scheduled audit digest email, student self-service "forgot ID" lookup by mobile, dark/light e-ticket template, volunteer leaderboard from desk attribution.

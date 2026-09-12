@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  History,
   Loader2,
   Lock,
   Megaphone,
@@ -28,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -375,6 +377,49 @@ export function QRView() {
                   </button>
                 ))}
               </div>
+              {(data.announcementHistory?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Recent broadcasts — tap to re-post">
+                  <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-purple-200/45">
+                    <History className="h-3 w-3" /> recent
+                  </span>
+                  {data.announcementHistory.map((h) => {
+                    const isLive = h.text === data.announcement;
+                    return (
+                      <button
+                        key={h.at + h.text.slice(0, 12)}
+                        type="button"
+                        onClick={() => setAnnouncementDraft(h.text)}
+                        disabled={savingAnnouncement}
+                        title={`“${h.text}” — broadcast ${(() => {
+                          try {
+                            return formatDistanceToNow(new Date(h.at), { addSuffix: true });
+                          } catch {
+                            return h.at;
+                          }
+                        })()}. Tap to load into the editor.`}
+                        className={cn(
+                          "group inline-flex max-w-[240px] items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-medium transition-all disabled:opacity-50 sm:max-w-[280px]",
+                          isLive
+                            ? "border-amber-300/60 bg-amber-500/15 text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.15)]"
+                            : "border-amber-300/20 bg-amber-500/[0.06] text-amber-100/70 hover:border-amber-300/60 hover:bg-amber-500/15 hover:text-amber-100"
+                        )}
+                      >
+                        {isLive && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400" aria-label="currently live" />}
+                        <span className="min-w-0 flex-1 truncate">{h.text}</span>
+                        <span className="shrink-0 whitespace-nowrap text-[9px] tabular-nums text-purple-200/40 transition-colors group-hover:text-amber-200/70">
+                          {(() => {
+                            try {
+                              return formatDistanceToNow(new Date(h.at), { addSuffix: true });
+                            } catch {
+                              return "";
+                            }
+                          })()}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <textarea
                 value={announcementDraft ?? data.announcement ?? ""}
                 onChange={(e) => setAnnouncementDraft(e.target.value)}

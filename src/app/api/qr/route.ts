@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { getBaseUrl, getEventSettings, qrDataUrl } from '@/lib/qr'
+import { getBaseUrl, getEventSettings, parseAnnouncementHistory, qrDataUrl } from '@/lib/qr'
 import type { EventStatus, QrResponse } from '@/lib/types'
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -25,6 +25,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       announcementExpiresAt: settings.announcementExpiresAt
         ? settings.announcementExpiresAt.toISOString()
         : null,
+      announcementHistory: parseAnnouncementHistory(settings.announcementHistory),
     } satisfies QrResponse)
   } catch {
     return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })

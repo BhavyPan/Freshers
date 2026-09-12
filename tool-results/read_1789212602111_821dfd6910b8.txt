@@ -1,0 +1,601 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect } from "react";
+     4→import { useQuery, useQueryClient } from "@tanstack/react-query";
+     5→import { motion } from "framer-motion";
+     6→import {
+     7→  AlertTriangle,
+     8→  Check,
+     9→  Clock,
+    10→  Copy,
+    11→  Download,
+    12→  Eye,
+    13→  EyeOff,
+    14→  FileText,
+    15→  Loader2,
+    16→  Lock,
+    17→  Megaphone,
+    18→  MessageCircle,
+    19→  PauseCircle,
+    20→  Printer,
+    21→  QrCode,
+    22→  Radio,
+    23→  RefreshCw,
+    24→  ScanLine,
+    25→  Share2,
+    26→  Shield,
+    27→  TimerOff,
+    28→  Trash2,
+    29→} from "lucide-react";
+    30→import { Button } from "@/components/ui/button";
+    31→import {
+    32→  AlertDialog,
+    33→  AlertDialogAction,
+    34→  AlertDialogCancel,
+    35→  AlertDialogContent,
+    36→  AlertDialogDescription,
+    37→  AlertDialogFooter,
+    38→  AlertDialogHeader,
+    39→  AlertDialogTitle,
+    40→} from "@/components/ui/alert-dialog";
+    41→import { Skeleton } from "@/components/ui/skeleton";
+    42→import { useToast } from "@/hooks/use-toast";
+    43→import { api, qrDownloadUrl } from "@/lib/api-client";
+    44→import { useObsidianStore } from "@/lib/client-store";
+    45→import type { EventStatus } from "@/lib/types";
+    46→import { EventStatusBadge } from "./EventStatusBadge";
+    47→import { cn } from "@/lib/utils";
+    48→
+    49→/** One-tap announcement drafts for frantic event moments. */
+    50→const ANNOUNCEMENT_PRESETS: { icon: string; label: string; text: string }[] = [
+    51→  {
+    52→    icon: "🚪",
+    53→    label: "Doors open",
+    54→    text: "Doors are fully open — come straight in, juniors! Entry takes under 30 seconds.",
+    55→  },
+    56→  {
+    57→    icon: "↗️",
+    58→    label: "Line moved",
+    59→    text: "The entry line has moved to Gate B — follow the purple flags.",
+    60→  },
+    61→  {
+    62→    icon: "🎓",
+    63→    label: "ID reminder",
+    64→    text: "Keep your college ID handy — you'll need your Student ID at the verification screen.",
+    65→  },
+    66→  {
+    67→    icon: "🎪",
+    68→    label: "Stage call",
+    69→    text: "Opening ceremony starts in 10 minutes at the main stage — head inside now!",
+    70→  },
+    71→];
+    72→
+    73→/** Auto-clear choices for a live announcement (null = stays until cleared). */
+    74→const EXPIRY_OPTIONS: { value: number | null; label: string }[] = [
+    75→  { value: null, label: "Until cleared" },
+    76→  { value: 5, label: "5m" },
+    77→  { value: 15, label: "15m" },
+    78→  { value: 30, label: "30m" },
+    79→  { value: 60, label: "1h" },
+    80→];
+    81→
+    82→function expiryCountdown(expiresAt: string | null, now: number | null): string | null {
+    83→  if (!expiresAt || now === null) return null;
+    84→  const ms = new Date(expiresAt).getTime() - now;
+    85→  if (ms <= 0) return null;
+    86→  const mins = Math.floor(ms / 60000);
+    87→  if (mins < 1) return "<1m left";
+    88→  if (mins < 60) return `${mins}m left`;
+    89→  return `${Math.floor(mins / 60)}h ${mins % 60}m left`;
+    90→}
+    91→
+    92→export function QRView() {
+    93→  const admin = useObsidianStore((s) => s.admin);
+    94→  const isAdmin = admin?.role === "ADMIN";
+    95→  const { toast } = useToast();
+    96→  const qc = useQueryClient();
+    97→
+    98→  const [showToken, setShowToken] = useState(false);
+    99→  const [confirmRotate, setConfirmRotate] = useState(false);
+   100→  const [rotating, setRotating] = useState(false);
+   101→  const [settingStatus, setSettingStatus] = useState<EventStatus | null>(null);
+   102→  const [announcementDraft, setAnnouncementDraft] = useState<string | null>(null);
+   103→  const [expiryChoice, setExpiryChoice] = useState<number | null>(15);
+   104→  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+   105→  const [canNativeShare, setCanNativeShare] = useState(false);
+   106→  const [nowTs, setNowTs] = useState<number | null>(null);
+   107→
+   108→  useEffect(() => {
+   109→    setCanNativeShare(typeof navigator !== "undefined" && "share" in navigator);
+   110→    setNowTs(Date.now());
+   111→    const t = setInterval(() => setNowTs(Date.now()), 15000);
+   112→    return () => clearInterval(t);
+   113→  }, []);
+   114→
+   115→  const { data, isLoading, refetch, isFetching } = useQuery({
+   116→    queryKey: ["qr"],
+   117→    queryFn: () => api.qr(),
+   118→    refetchOnWindowFocus: true,
+   119→  });
+   120→
+   121→  async function handleRotate() {
+   122→    setRotating(true);
+   123→    try {
+   124→      await api.qrRegenerate();
+   125→      await refetch();
+   126→      await qc.invalidateQueries({ queryKey: ["qr"] });
+   127→      toast({ title: "Event token rotated", description: "A fresh QR was generated. Reprint and replace the venue QR." });
+   128→    } catch (err) {
+   129→      toast({ title: "Rotation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+   130→    } finally {
+   131→      setRotating(false);
+   132→      setConfirmRotate(false);
+   133→    }
+   134→  }
+   135→
+   136→  async function handleStatus(next: EventStatus) {
+   137→    if (!data || next === data.event.status) return;
+   138→    setSettingStatus(next);
+   139→    try {
+   140→      await api.setEventStatus(next);
+   141→      await refetch();
+   142→      await qc.invalidateQueries({ queryKey: ["qr"] });
+   143→      toast({
+   144→        title: `Gate ${next === "OPEN" ? "opened" : next === "PAUSED" ? "paused" : "closed"}`,
+   145→        description:
+   146→          next === "OPEN"
+   147→            ? "Juniors can verify and check in again."
+   148→            : "New verifications now receive a themed PAUSED/CLOSED screen.",
+   149→      });
+   150→    } catch (err) {
+   151→      toast({ title: "Could not update gate", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+   152→    } finally {
+   153→      setSettingStatus(null);
+   154→    }
+   155→  }
+   156→
+   157→  async function saveAnnouncement() {
+   158→    if (announcementDraft === null) return;
+   159→    setSavingAnnouncement(true);
+   160→    try {
+   161→      const text = announcementDraft.trim() === "" ? null : announcementDraft.trim();
+   162→      const res = await api.setAnnouncement(text, expiryChoice);
+   163→      setAnnouncementDraft(null);
+   164→      await qc.invalidateQueries({ queryKey: ["qr"] });
+   165→      await qc.invalidateQueries({ queryKey: ["pulse"] });
+   166→      toast({
+   167→        title: res.announcement ? "Announcement live" : "Announcement cleared",
+   168→        description: res.announcement
+   169→          ? res.announcementExpiresAt
+   170→            ? `Every public screen shows it — auto-clears in ${(expiryCountdown(res.announcementExpiresAt, Date.now()) ?? "a moment").replace(/ left$/, "")}.`
+   171→            : "Every public screen shows it within seconds."
+   172→          : "Public screens no longer show a notice.",
+   173→      });
+   174→    } catch (err) {
+   175→      toast({ title: "Could not save announcement", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+   176→    } finally {
+   177→      setSavingAnnouncement(false);
+   178→    }
+   179→  }
+   180→
+   181→  function copyUrl() {
+   182→    if (!data?.url) return;
+   183→    navigator.clipboard
+   184→      .writeText(data.url)
+   185→      .then(() => toast({ title: "URL copied", description: data.url }))
+   186→      .catch(() => toast({ title: "Copy failed", description: "Long-press the URL to copy manually.", variant: "destructive" }));
+   187→  }
+   188→
+   189→  function inviteText(url: string) {
+   190→    return `\u{1F30C} OBSIDIAN '26 — Unfold the Unknown\n\nFreshers 2K26 smart entry portal:\n${url}\n\nScan the venue QR or open the link, enter your Student ID, and you're in. See you at the door! \u2728`;
+   191→  }
+   192→
+   193→  function shareWhatsApp() {
+   194→    if (!data?.url) return;
+   195→    window.open(`https://wa.me/?text=${encodeURIComponent(inviteText(data.url))}`, "_blank", "noopener");
+   196→  }
+   197→
+   198→  async function nativeShare() {
+   199→    if (!data?.url) return;
+   200→    try {
+   201→      await navigator.share({
+   202→        title: "OBSIDIAN '26 — Smart QR Entry",
+   203→        text: `OBSIDIAN '26 Freshers 2K26 — check in here:`,
+   204→        url: data.url,
+   205→      });
+   206→    } catch {
+   207→      /* user dismissed — ignore */
+   208→    }
+   209→  }
+   210→
+   211→  function copyInvite() {
+   212→    if (!data?.url) return;
+   213→    navigator.clipboard
+   214→      .writeText(inviteText(data.url))
+   215→      .then(() => toast({ title: "Invite copied", description: "Paste it into any WhatsApp group or DM." }))
+   216→      .catch(() => toast({ title: "Copy failed", description: "Try again or copy the URL instead.", variant: "destructive" }));
+   217→  }
+   218→
+   219→  if (isLoading || !data) {
+   220→    return (
+   221→      <div className="grid gap-6 lg:grid-cols-2">
+   222→        <Skeleton className="h-[420px] rounded-2xl bg-purple-500/10" />
+   223→        <div className="space-y-4">
+   224→          <Skeleton className="h-64 rounded-2xl bg-purple-500/10" />
+   225→          <Skeleton className="h-40 rounded-2xl bg-purple-500/10" />
+   226→        </div>
+   227→      </div>
+   228→    );
+   229→  }
+   230→
+   231→  const masked = data.token.slice(0, 4) + "•".repeat(Math.max(0, data.token.length - 8)) + data.token.slice(-4);
+   232→
+   233→  return (
+   234→    <div className="grid gap-6 lg:grid-cols-2">
+   235→      {/* QR preview card */}
+   236→      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+   237→        <div className="mb-5 flex items-center gap-2.5">
+   238→          <QrCode className="h-4.5 w-4.5 text-purple-300" />
+   239→          <p className="text-sm font-semibold text-purple-100">Official Venue QR</p>
+   240→          {data.event.status && (
+   241→            <EventStatusBadge status={data.event.status} className="ml-auto" />
+   242→          )}
+   243→          {isFetching && <Loader2 className={cn("h-3.5 w-3.5 text-purple-400/60", data.event.status ? "ml-2" : "ml-auto")} />}
+   244→        </div>
+   245→
+   246→        {/* QR with corner brackets */}
+   247→        <div className="relative mx-auto w-fit">
+   248→          <div className="absolute -inset-3 rounded-2xl bg-gradient-to-br from-purple-600/25 via-transparent to-fuchsia-600/20 blur-lg" />
+   249→          <div className="relative rounded-2xl border border-purple-400/40 bg-white p-4 shadow-[0_0_45px_rgba(147,51,234,0.3)]">
+   250→            <img src={data.qrDataUrl} alt="OBSIDIAN '26 venue entry QR code" className="h-56 w-56 sm:h-64 sm:w-64" width={256} height={256} />
+   251→            {/* corner brackets */}
+   252→            {(["-top-2.5 -left-2.5 border-t-2 border-l-2", "-top-2.5 -right-2.5 border-t-2 border-r-2", "-bottom-2.5 -left-2.5 border-b-2 border-l-2", "-bottom-2.5 -right-2.5 border-b-2 border-r-2"] as const).map((pos) => (
+   253→              <span key={pos} className={`absolute h-6 w-6 rounded-sm border-purple-400 ${pos}`} />
+   254→            ))}
+   255→          </div>
+   256→        </div>
+   257→
+   258→        <div className="mt-6 text-center">
+   259→          <p className="flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200/60">
+   260→            <ScanLine className="h-3.5 w-3.5 text-purple-300" /> Scan to enter
+   261→          </p>
+   262→          <div className="mt-3 flex items-center gap-2 rounded-xl border border-purple-500/25 bg-[#0b0517]/80 px-4 py-3">
+   263→            <code className="min-w-0 flex-1 truncate font-mono text-xs text-purple-100/90">{data.url}</code>
+   264→            <Button size="icon" variant="ghost" onClick={copyUrl} className="h-7 w-7 shrink-0 text-purple-300 hover:bg-purple-500/15" aria-label="Copy URL">
+   265→              <Copy className="h-3.5 w-3.5" />
+   266→            </Button>
+   267→          </div>
+   268→          <button
+   269→            onClick={() => setShowToken((v) => !v)}
+   270→            className="mt-3 inline-flex items-center gap-1.5 font-mono text-[11px] text-purple-300/60 transition-colors hover:text-purple-200"
+   271→          >
+   272→            <Eye className="h-3 w-3" />
+   273→            token: {showToken ? data.token : masked}
+   274→            {showToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+   275→          </button>
+   276→        </div>
+   277→      </motion.div>
+   278→
+   279→      {/* actions + guide */}
+   280→      <div className="space-y-6">
+   281→        {/* gate control */}
+   282→        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+   283→          <div className="flex items-center justify-between gap-2">
+   284→            <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+   285→              <Radio className="h-4.5 w-4.5 text-purple-300" /> Entry gate control
+   286→            </p>
+   287→            {data.event.status && <EventStatusBadge status={data.event.status} />}
+   288→          </div>
+   289→          <p className="mt-3 text-[12px] leading-relaxed text-purple-200/55">
+   290→            Pause entry during peak-hour surges or close the doors for the night — the venue QR keeps working, but new
+   291→            verifications see a themed PAUSED / CLOSED screen instead of a check-in.
+   292→          </p>
+   293→          <div className="mt-4 grid grid-cols-3 gap-2.5" role="group" aria-label="Entry gate status">
+   294→            {(
+   295→              [
+   296→                { value: "OPEN", label: "Open", icon: Radio, active: "border-emerald-400/60 bg-emerald-500/15 text-emerald-200" },
+   297→                { value: "PAUSED", label: "Paused", icon: PauseCircle, active: "border-amber-400/60 bg-amber-500/15 text-amber-200" },
+   298→                { value: "CLOSED", label: "Closed", icon: Lock, active: "border-rose-400/60 bg-rose-500/15 text-rose-200" },
+   299→              ] as const
+   300→            ).map((opt) => {
+   301→              const isActive = data.event.status === opt.value;
+   302→              const busy = settingStatus === opt.value;
+   303→              return isAdmin ? (
+   304→                <button
+   305→                  key={opt.value}
+   306→                  onClick={() => handleStatus(opt.value)}
+   307→                  disabled={settingStatus !== null}
+   308→                  className={cn(
+   309→                    "flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50",
+   310→                    isActive
+   311→                      ? opt.active
+   312→                      : "border-purple-500/25 bg-[#0b0514]/70 text-purple-200/55 hover:border-purple-400/50 hover:text-purple-100"
+   313→                  )}
+   314→                  aria-pressed={isActive}
+   315→                >
+   316→                  {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <opt.icon className="h-4.5 w-4.5" />}
+   317→                  {opt.label}
+   318→                </button>
+   319→              ) : (
+   320→                <div
+   321→                  key={opt.value}
+   322→                  className={cn(
+   323→                    "flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em]",
+   324→                    isActive ? opt.active : "border-purple-500/25 bg-[#0b0514]/70 text-purple-200/40"
+   325→                  )}
+   326→                >
+   327→                  <opt.icon className="h-4.5 w-4.5" />
+   328→                  {opt.label}
+   329→                </div>
+   330→              );
+   331→            })}
+   332→          </div>
+   333→          {!isAdmin && <p className="mt-3 text-[11px] text-purple-200/40">Gate control is available to admins only.</p>}
+   334→        </motion.div>
+   335→
+   336→        {/* live announcement */}
+   337→        <motion.div initial={{ opacity: 0, y: 14, delay: 0.05 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+   338→          <div className="flex items-center justify-between gap-2">
+   339→            <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+   340→              <Megaphone className="h-4.5 w-4.5 text-amber-300" /> Live announcement
+   341→            </p>
+   342→            {data.announcement ? (
+   343→              <span className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
+   344→                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" /> live
+   345→                {expiryCountdown(data.announcementExpiresAt, nowTs) && (
+   346→                  <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-amber-300/90 normal-case">
+   347→                    <Clock className="h-2.5 w-2.5" />
+   348→                    {expiryCountdown(data.announcementExpiresAt, nowTs)}
+   349→                  </span>
+   350→                )}
+   351→              </span>
+   352→            ) : (
+   353→              <span className="rounded-full border border-purple-500/25 bg-purple-500/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200/50">off</span>
+   354→            )}
+   355→          </div>
+   356→          <p className="mt-3 text-[12px] leading-relaxed text-purple-200/55">
+   357→            Broadcast a one-line notice to every public screen — entry page and verification page. Perfect for
+   358→            “Line moved to Gate B” moments. Optionally auto-clear after a window so stale notices never outlive
+   359→            their moment.
+   360→          </p>
+   361→
+   362→          {isAdmin ? (
+   363→            <div className="mt-4 space-y-2.5">
+   364→              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick announcement presets">
+   365→                {ANNOUNCEMENT_PRESETS.map((p) => (
+   366→                  <button
+   367→                    key={p.label}
+   368→                    type="button"
+   369→                    onClick={() => setAnnouncementDraft(p.text)}
+   370→                    disabled={savingAnnouncement}
+   371→                    title={p.text}
+   372→                    className="rounded-full border border-purple-500/25 bg-purple-500/8 px-3 py-1 text-[10px] font-semibold text-purple-200/75 transition-all hover:border-amber-300/50 hover:bg-amber-500/10 hover:text-amber-200 disabled:opacity-50"
+   373→                  >
+   374→                    {p.icon} {p.label}
+   375→                  </button>
+   376→                ))}
+   377→              </div>
+   378→              <textarea
+   379→                value={announcementDraft ?? data.announcement ?? ""}
+   380→                onChange={(e) => setAnnouncementDraft(e.target.value)}
+   381→                maxLength={200}
+   382→                rows={2}
+   383→                placeholder="e.g. Line for CSE juniors has moved to Gate B — follow the purple flags."
+   384→                aria-label="Announcement text"
+   385→                className="w-full resize-none rounded-xl border border-purple-500/30 bg-[#0b0517]/90 px-4 py-3 text-sm leading-relaxed text-purple-50 placeholder:text-purple-200/25 focus:border-amber-300/60 focus:ring-2 focus:ring-amber-400/20"
+   386→              />
+   387→              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Auto-clear schedule">
+   388→                <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-purple-200/45">
+   389→                  <TimerOff className="h-3 w-3" /> auto-clear
+   390→                </span>
+   391→                {EXPIRY_OPTIONS.map((opt) => {
+   392→                  const isActive = expiryChoice === opt.value;
+   393→                  return (
+   394→                    <button
+   395→                      key={opt.label}
+   396→                      type="button"
+   397→                      onClick={() => setExpiryChoice(opt.value)}
+   398→                      disabled={savingAnnouncement}
+   399→                      aria-pressed={isActive}
+   400→                      className={cn(
+   401→                        "rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide transition-all disabled:opacity-50",
+   402→                        isActive
+   403→                          ? "border-amber-300/60 bg-amber-500/15 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.18)]"
+   404→                          : "border-purple-500/25 bg-[#0b0514]/70 text-purple-200/55 hover:border-amber-300/40 hover:text-amber-200/80"
+   405→                      )}
+   406→                    >
+   407→                      {opt.label}
+   408→                    </button>
+   409→                  );
+   410→                })}
+   411→              </div>
+   412→              <div className="flex items-center justify-between gap-2">
+   413→                <p className="text-[10px] tabular-nums text-purple-200/40">
+   414→                  {(announcementDraft ?? data.announcement ?? "").length}/200
+   415→                </p>
+   416→                <div className="flex gap-2">
+   417→                  {(data.announcement || (announcementDraft !== null && announcementDraft.trim() !== "")) && (
+   418→                    <Button
+   419→                      variant="outline"
+   420→                      size="sm"
+   421→                      disabled={savingAnnouncement || (announcementDraft ?? data.announcement ?? "").trim() === ""}
+   422→                      onClick={() => setAnnouncementDraft("")}
+   423→                      className="border-purple-500/30 text-xs text-purple-200/70"
+   424→                    >
+   425→                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+   426→                      Clear
+   427→                    </Button>
+   428→                  )}
+   429→                  <Button
+   430→                    size="sm"
+   431→                    disabled={
+   432→                      savingAnnouncement ||
+   433→                      announcementDraft === null ||
+   434→                      announcementDraft.trim() === (data.announcement ?? "").trim()
+   435→                    }
+   436→                    onClick={saveAnnouncement}
+   437→                    className="obs-glow-btn bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 text-xs text-white"
+   438→                  >
+   439→                    {savingAnnouncement ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+   440→                    Broadcast
+   441→                  </Button>
+   442→                </div>
+   443→              </div>
+   444→            </div>
+   445→          ) : data.announcement ? (
+   446→            <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/8 px-4 py-3">
+   447→              <p className="text-sm text-amber-100">“{data.announcement}”</p>
+   448→              {expiryCountdown(data.announcementExpiresAt, nowTs) && (
+   449→                <p className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300/70">
+   450→                  <Clock className="h-3 w-3" /> auto-clears · {expiryCountdown(data.announcementExpiresAt, nowTs)}
+   451→                </p>
+   452→              )}
+   453→            </div>
+   454→          ) : (
+   455→            <p className="mt-3 text-[11px] text-purple-200/40">No notice is live. Only admins can broadcast.</p>
+   456→          )}
+   457→        </motion.div>
+   458→
+   459→        <motion.div initial={{ opacity: 0, y: 14, delay: 0.08 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+   460→          <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+   461→            <Download className="h-4.5 w-4.5 text-purple-300" /> Download print-ready assets
+   462→          </p>
+   463→          <div className="mt-4 grid grid-cols-3 gap-3">
+   464→            {(
+   465→              [
+   466→                { format: "png", label: "PNG", desc: "1024px image", icon: Download },
+   467→                { format: "svg", label: "SVG", desc: "vector", icon: FileText },
+   468→                { format: "pdf", label: "PDF", desc: "A4 poster", icon: Printer },
+   469→              ] as const
+   470→            ).map((d) => (
+   471→              <a
+   472→                key={d.format}
+   473→                href={qrDownloadUrl(d.format)}
+   474→                download
+   475→                className="obs-card-hover group flex flex-col items-center gap-1.5 rounded-xl border border-purple-500/25 bg-[#0b0514]/70 p-4 text-center"
+   476→              >
+   477→                <d.icon className="h-5 w-5 text-purple-300 transition-transform group-hover:scale-110" />
+   478→                <span className="text-sm font-bold text-purple-50">{d.label}</span>
+   479→                <span className="text-[10px] text-purple-200/50">{d.desc}</span>
+   480→              </a>
+   481→            ))}
+   482→          </div>
+   483→          <p className="mt-4 text-[11px] leading-relaxed text-purple-200/45">
+   484→            The PDF poster includes OBSIDIAN &apos;26 branding and the entry URL — print it, stick it at the venue entrance,
+   485→            and juniors are one scan away.
+   486→          </p>
+   487→        </motion.div>
+   488→
+   489→        <motion.div initial={{ opacity: 0, y: 14, delay: 0.12 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+   490→          <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+   491→            <Share2 className="h-4.5 w-4.5 text-emerald-300" /> Share the entry link
+   492→          </p>
+   493→          <p className="mt-3 text-[12px] leading-relaxed text-purple-200/55">
+   494→            Blast the portal to class groups before the doors open — juniors who pre-open the link breeze through at the desk.
+   495→          </p>
+   496→          <div className="mt-4 flex flex-wrap gap-2.5">
+   497→            <Button
+   498→              onClick={shareWhatsApp}
+   499→              className="obs-glow-btn h-11 flex-1 rounded-xl border border-emerald-400/40 bg-emerald-600/90 text-sm font-semibold text-white hover:bg-emerald-500 sm:flex-none sm:px-6"
+   500→            >
+   501→              <MessageCircle className="mr-2 h-4.5 w-4.5" />
+   502→              WhatsApp
+   503→            </Button>
+   504→            {canNativeShare && (
+   505→              <Button
+   506→                onClick={nativeShare}
+   507→                variant="outline"
+   508→                className="h-11 flex-1 rounded-xl border-purple-500/35 text-sm font-semibold text-purple-100 hover:bg-purple-500/15 sm:flex-none sm:px-6"
+   509→              >
+   510→                <Share2 className="mr-2 h-4 w-4" />
+   511→                More…
+   512→              </Button>
+   513→            )}
+   514→            <Button
+   515→              onClick={copyInvite}
+   516→              variant="outline"
+   517→              className="h-11 flex-1 rounded-xl border-purple-500/35 text-sm font-semibold text-purple-100 hover:bg-purple-500/15 sm:flex-none sm:px-6"
+   518→            >
+   519→              <Copy className="mr-2 h-4 w-4" />
+   520→              Copy invite
+   521→            </Button>
+   522→          </div>
+   523→        </motion.div>
+   524→
+   525→        <motion.div initial={{ opacity: 0, y: 14, delay: 0.16 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+   526→          <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+   527→            <Shield className="h-4.5 w-4.5 text-purple-300" /> QR security — rotating event token
+   528→          </p>
+   529→          <div className="mt-4 space-y-3 text-[12px] leading-relaxed text-purple-200/60">
+   530→            <p>
+   531→              Every QR embeds a secret event token. If a screenshot gets forwarded on WhatsApp, rotate the token —
+   532→              new scans from the old QR get flagged in the audit trail while still verifying.
+   533→            </p>
+   534→            <div className="flex items-center justify-between rounded-xl border border-purple-500/20 bg-[#0b0517]/70 px-4 py-3">
+   535→              <div>
+   536→                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-purple-300/60">Current token</p>
+   537→                <p className="mt-0.5 font-mono text-xs text-purple-100/90">{showToken ? data.token : masked}</p>
+   538→              </div>
+   539→              {isAdmin && (
+   540→                <Button
+   541→                  onClick={() => setConfirmRotate(true)}
+   542→                  disabled={rotating}
+   543→                  variant="outline"
+   544→                  size="sm"
+   545→                  className="border-amber-400/40 bg-amber-500/10 text-xs text-amber-200 hover:bg-amber-500/20"
+   546→                >
+   547→                  {rotating ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+   548→                  Rotate
+   549→                </Button>
+   550→              )}
+   551→            </div>
+   552→            {!isAdmin && (
+   553→              <p className="text-[11px] text-purple-200/40">Token rotation is available to admins only.</p>
+   554→            )}
+   555→          </div>
+   556→        </motion.div>
+   557→
+   558→        <motion.div initial={{ opacity: 0, y: 14, delay: 0.24 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-6">
+   559→          <p className="text-sm font-semibold text-purple-100">Setup checklist</p>
+   560→          <ol className="mt-3 space-y-2.5">
+   561→            {[
+   562→              "Download the PDF (or PNG) and print it at a visible size (≥ 20 cm).",
+   563→              "Place it at the main entrance and registration desk.",
+   564→              "Juniors scan → land on the 3D portal → enter their ID → check-in is recorded live.",
+   565→              "If the QR leaks, rotate the token and reprint.",
+   566→            ].map((step, i) => (
+   567→              <li key={i} className="flex items-start gap-2.5 text-[12px] leading-relaxed text-purple-200/60">
+   568→                <span className="font-display mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-[9px] font-bold text-purple-200">
+   569→                  {i + 1}
+   570→                </span>
+   571→                {step}
+   572→              </li>
+   573→            ))}
+   574→          </ol>
+   575→        </motion.div>
+   576→      </div>
+   577→
+   578→      {/* rotate confirm */}
+   579→      <AlertDialog open={confirmRotate} onOpenChange={setConfirmRotate}>
+   580→        <AlertDialogContent className="obs-card border-amber-500/40">
+   581→          <AlertDialogHeader>
+   582→            <AlertDialogTitle className="font-display flex items-center gap-2 text-amber-100">
+   583→              <AlertTriangle className="h-5 w-5 text-amber-400" /> Rotate event token?
+   584→            </AlertDialogTitle>
+   585→            <AlertDialogDescription className="text-purple-200/70">
+   586→              The old QR stops being marked valid. Students scanning a forwarded/outdated QR will still be verified, but
+   587→              the attempt is flagged in the audit trail. You must reprint and replace the venue QR afterwards.
+   588→            </AlertDialogDescription>
+   589→          </AlertDialogHeader>
+   590→          <AlertDialogFooter>
+   591→            <AlertDialogCancel className="border-purple-500/30 text-purple-200">Keep current</AlertDialogCancel>
+   592→            <AlertDialogAction onClick={handleRotate} className="bg-amber-600 text-white hover:bg-amber-500">
+   593→              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Rotate now
+   594→            </AlertDialogAction>
+   595→          </AlertDialogFooter>
+   596→        </AlertDialogContent>
+   597→      </AlertDialog>
+   598→    </div>
+   599→  );
+   600→}
+   601→

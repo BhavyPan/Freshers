@@ -24,6 +24,7 @@ import {
   Mail,
   Phone,
   Play,
+  Share2,
   ShieldCheck,
   Sparkles,
   Undo2,
@@ -37,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { playFeedback } from "@/lib/feedback";
-import { downloadPassCard, inviteUrlFor, whatsappInviteUrl } from "@/lib/pass-card";
+import { canShareFiles, downloadPassCard, inviteUrlFor, sharePassCard, whatsappInviteUrl } from "@/lib/pass-card";
 import type { AdminRole, AuditRow, StudentRow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -145,7 +146,13 @@ export function StudentProfileDrawer({
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [passBusy, setPassBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [canShare, setCanShare] = useState(false);
   const passLock = useRef(false);
+
+  useEffect(() => {
+    setCanShare(canShareFiles());
+  }, []);
 
   const open = studentId !== null;
 
@@ -227,6 +234,32 @@ export function StudentProfileDrawer({
     } finally {
       passLock.current = false;
       setPassBusy(false);
+    }
+  }
+
+  async function sharePass() {
+    if (!student || passLock.current) return;
+    passLock.current = true;
+    setShareBusy(true);
+    try {
+      const outcome = await sharePassCard({ student });
+      playFeedback("granted");
+      toast(
+        outcome === "shared"
+          ? {
+              title: "Pass ready to share",
+              description: `Pick WhatsApp, Mail or any app in the share sheet — ${student.name}'s pass is attached.`,
+            }
+          : {
+              title: "E-invite pass downloaded",
+              description: "This device can't share files directly, so the PNG was downloaded instead.",
+            }
+      );
+    } catch {
+      /* user dismissed the share sheet — not an error */
+    } finally {
+      passLock.current = false;
+      setShareBusy(false);
     }
   }
 
@@ -374,6 +407,17 @@ export function StudentProfileDrawer({
                     {passBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                     Pass PNG
                   </Button>
+                  {canShare && (
+                    <Button
+                      onClick={() => void sharePass()}
+                      disabled={shareBusy}
+                      variant="outline"
+                      className="h-10 rounded-xl border-emerald-400/40 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
+                    >
+                      {shareBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
+                      Share pass…
+                    </Button>
+                  )}
                 </div>
                 <p className="mt-2.5 text-[10px] leading-relaxed text-purple-200/35">
                   The invite link pre-fills the entry form on the student&apos;s phone; the pass PNG is a

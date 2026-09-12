@@ -74,5 +74,6 @@ model EventSettings {
   status       String    @default("OPEN") // OPEN | PAUSED | CLOSED — entry gate control
   announcement String? // one-line live notice broadcast to all public screens
   announcementExpiresAt DateTime? // when set, the announcement auto-clears at this time
+  announcementHistory String? // JSON array of recent broadcasts [{text, at}] for one-tap re-posting
   updatedAt    DateTime  @updatedAt
 }

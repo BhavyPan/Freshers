@@ -120,6 +120,7 @@ export interface QrResponse {
   generatedAt: string;
   announcement: string | null;
   announcementExpiresAt: string | null;
+  announcementHistory: { text: string; at: string }[];
 }
 
 export interface EventStatusResponse {
@@ -129,6 +130,7 @@ export interface EventStatusResponse {
   tagline: string;
   announcement: string | null;
   announcementExpiresAt: string | null;
+  announcementHistory: { text: string; at: string }[];
 }
 
 export interface PublicPulseResponse {

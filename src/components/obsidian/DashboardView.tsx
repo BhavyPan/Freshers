@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,9 +10,12 @@ import {
   Grid3X3,
   Hourglass,
   Layers,
+  PartyPopper,
   Radar,
   ShieldAlert,
+  Target,
   TrendingUp,
+  Trophy,
   UserCheck,
 } from "lucide-react";
 import {
@@ -28,7 +32,10 @@ import {
 } from "recharts";
 import { format, formatDistanceToNow } from "date-fns";
 import { api } from "@/lib/api-client";
+import { playFeedback } from "@/lib/feedback";
+import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SparkleBurst } from "./SparkleBurst";
 import { cn } from "@/lib/utils";
 
 function timeAgo(iso: string) {
@@ -113,6 +120,69 @@ function AnimatedNumber({ value }: { value: number | string }) {
   );
 }
 
+function DeptGoals({ depts }: { depts: { dept: string; total: number; checkedIn: number }[] }) {
+  const rows = depts.filter((d) => d.total > 0);
+  const completeCount = rows.filter((d) => d.checkedIn >= d.total).length;
+  return (
+    <div>
+      <div className="obs-scrollbar max-h-96 space-y-3.5 overflow-y-auto pr-1">
+        {rows.map((d) => {
+          const pct = Math.min(100, Math.round((d.checkedIn / d.total) * 100));
+          const done = d.checkedIn >= d.total;
+          return (
+            <div key={d.dept} className="group">
+              <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.12em] text-purple-100">
+                  <span className="truncate">{d.dept}</span>
+                  {done && <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-300 drop-shadow-[0_0_6px_rgba(252,211,77,0.8)]" aria-label="Goal complete" />}
+                </p>
+                <p className="shrink-0 font-mono text-[10px] tabular-nums text-purple-200/55">
+                  {d.checkedIn}/{d.total}
+                  <span className={cn("ml-2 font-bold", done ? "text-emerald-300" : pct >= 50 ? "text-fuchsia-300" : "text-purple-200/70")}>
+                    {pct}%
+                  </span>
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "relative h-2.5 overflow-hidden rounded-full border",
+                  done
+                    ? "border-emerald-400/50 bg-emerald-500/10 shadow-[0_0_14px_rgba(52,211,153,0.25)]"
+                    : "border-purple-500/25 bg-[#0b0517]"
+                )}
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${d.dept}: ${d.checkedIn} of ${d.total} checked in`}
+              >
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                  className={cn(
+                    "relative h-full rounded-full",
+                    done
+                      ? "bg-gradient-to-r from-emerald-600 via-emerald-400 to-teal-300"
+                      : "obs-goal-shimmer bg-gradient-to-r from-violet-800 via-purple-500 to-fuchsia-400"
+                  )}
+                >
+                  {!done && pct > 0 && (
+                    <span className="absolute right-0 top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-purple-200 shadow-[0_0_8px_rgba(216,180,254,0.9)]" />
+                  )}
+                </motion.div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[10px] text-purple-200/40">
+        Goal: every registered junior inside · {completeCount}/{rows.length} departments complete
+      </p>
+    </div>
+  );
+}
+
 function KpiCard({
   icon: Icon,
   label,
@@ -140,7 +210,7 @@ function KpiCard({
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.45 }}
-      className={cn("obs-card-hover relative overflow-hidden rounded-2xl border bg-gradient-to-br to-transparent p-5", accents.split(" ")[0], accents.split(" ")[2], accents.split(" ")[3])}
+      className={cn("obs-card-hover relative overflow-hidden rounded-2xl border bg-gradient-to-br to-transparent p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(147,51,234,0.18)]", accents.split(" ")[0], accents.split(" ")[2], accents.split(" ")[3])}
     >
       <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-current opacity-[0.06] blur-2xl" />
       <div className="flex items-center justify-between">
@@ -171,6 +241,7 @@ function KpiCard({
 }
 
 export function DashboardView() {
+  const { toast } = useToast();
   const { data, isLoading } = useQuery({
     queryKey: ["stats"],
     queryFn: () => api.stats(),
@@ -180,6 +251,45 @@ export function DashboardView() {
 
   const stats = data?.stats;
   const recent = data?.recent ?? [];
+
+  // ---- department goal celebrations (confetti on a dept hitting 100%) ----
+  const [goalBurst, setGoalBurst] = useState<string | null>(null);
+  const doneDeptsRef = useRef<Set<string> | null>(null);
+  const deptKey = JSON.stringify(stats?.studentsByDept ?? []);
+
+  useEffect(() => {
+    const depts = JSON.parse(deptKey) as { dept: string; total: number; checkedIn: number }[];
+    if (depts.length === 0) return;
+    // first run: hydrate the already-complete set from localStorage (no celebration)
+    if (doneDeptsRef.current === null) {
+      let stored: unknown = [];
+      try {
+        stored = JSON.parse(window.localStorage.getItem("obs-goals-done") ?? "[]");
+      } catch {
+        stored = [];
+      }
+      doneDeptsRef.current = new Set(
+        Array.isArray(stored) ? stored.filter((s): s is string => typeof s === "string") : []
+      );
+    }
+    const complete = depts.filter((d) => d.total > 0 && d.checkedIn >= d.total).map((d) => d.dept);
+    const fresh = complete.find((d) => !doneDeptsRef.current!.has(d));
+    if (!fresh) return;
+    for (const d of complete) doneDeptsRef.current!.add(d);
+    try {
+      window.localStorage.setItem("obs-goals-done", JSON.stringify([...doneDeptsRef.current]));
+    } catch {
+      /* private mode — celebration still fires, just not persisted */
+    }
+    setGoalBurst(fresh);
+    playFeedback("granted");
+    toast({
+      title: `${fresh} squad is all in! 🎉`,
+      description: `Every registered ${fresh} junior has checked in — goal complete.`,
+    });
+    const t = setTimeout(() => setGoalBurst(null), 2600);
+    return () => clearTimeout(t);
+  }, [deptKey, toast]);
 
   const timelineData = (stats?.timeline ?? []).map((t) => ({
     time: format(new Date(t.bucket), "HH:mm"),
@@ -208,6 +318,36 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6">
+      {/* goal celebration overlay */}
+      <AnimatePresence>
+        {goalBurst && (
+          <motion.div
+            key={goalBurst}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center"
+            aria-live="polite"
+          >
+            <SparkleBurst count={34} />
+            <motion.div
+              initial={{ scale: 0.6, y: 24, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.85, y: -18, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 18 }}
+              className="flex items-center gap-3 rounded-2xl border border-amber-300/50 bg-[#140b26]/95 px-6 py-4 shadow-[0_0_60px_rgba(251,191,36,0.35)]"
+            >
+              <PartyPopper className="h-7 w-7 text-amber-300" />
+              <div>
+                <p className="font-display text-lg font-black text-amber-100">{goalBurst} squad is ALL IN!</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-purple-200/60">100% checked in · goal complete</p>
+              </div>
+              <Trophy className="h-6 w-6 text-amber-300 drop-shadow-[0_0_10px_rgba(252,211,77,0.9)]" />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <KpiCard icon={Layers} label="Total Registered" value={stats.totalRegistered} accent="purple" delay={0} />
@@ -240,7 +380,16 @@ export function DashboardView() {
             of registered juniors inside
           </p>
         </div>
-        <div className="mt-4 h-3 overflow-hidden rounded-full border border-purple-500/25 bg-[#0b0517]">
+        <div className="relative mt-4 h-3 overflow-hidden rounded-full border border-purple-500/25 bg-[#0b0517]">
+          {/* milestone ticks */}
+          {[25, 50, 75].map((m) => (
+            <span
+              key={m}
+              aria-hidden
+              className="absolute top-1/2 h-2 w-px -translate-y-1/2 bg-purple-300/25"
+              style={{ left: `${m}%` }}
+            />
+          ))}
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${Math.min(stats.checkinRate, 100)}%` }}
@@ -384,6 +533,23 @@ export function DashboardView() {
           </div>
         </motion.div>
       </div>
+
+      {/* department goals — race to 100% */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.42 }}
+        className="obs-card rounded-2xl p-5"
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <Target className="h-4 w-4 text-amber-300" />
+          <p className="text-sm font-semibold text-purple-100">Department Goals — race to 100%</p>
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-purple-200/50">
+            <span className="obs-live-dot h-1.5 w-1.5 rounded-full bg-amber-400" /> live
+          </span>
+        </div>
+        <DeptGoals depts={stats.studentsByDept} />
+      </motion.div>
 
       {/* recent check-ins */}
       <motion.div

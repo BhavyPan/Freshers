@@ -344,3 +344,46 @@ export async function downloadPassCard(opts: PassCardOptions): Promise<void> {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+
+/** Whether this device can share files through the native share sheet. */
+export function canShareFiles(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+  try {
+    const probe = new File(["probe"], "probe.png", { type: "image/png" });
+    return typeof nav.share === "function" && typeof nav.canShare === "function" && nav.canShare({ files: [probe] });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Share the branded pass PNG through the native share sheet (WhatsApp, Mail,
+ * etc. on mobile) — falls back to a plain download on desktop browsers that
+ * don't support file sharing.
+ */
+export async function sharePassCard(opts: PassCardOptions): Promise<"shared" | "downloaded"> {
+  const blob = await generatePassCardBlob(opts);
+  const fileName = `obsidian26-pass-${opts.student.studentId}.png`;
+  const file = new File([blob], fileName, { type: "image/png" });
+  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+
+  if (typeof nav.share === "function" && nav.canShare?.({ files: [file] })) {
+    await nav.share({
+      files: [file],
+      title: "OBSIDIAN '26 — E-invite pass",
+      text: `${opts.student.name}'s smart-entry pass for OBSIDIAN '26 — scan the QR or tap the personal link to verify.`,
+    });
+    return "shared";
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return "downloaded";
+}

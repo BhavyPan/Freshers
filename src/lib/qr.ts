@@ -47,6 +47,38 @@ async function expireAnnouncement(settings: EventSettings): Promise<EventSetting
   }
 }
 
+/** The announcement history is stored as a JSON string — parse defensively. */
+export function parseAnnouncementHistory(raw: string | null | undefined): { text: string; at: string }[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(
+        (entry): entry is { text: string; at: string } =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          typeof (entry as { text?: unknown }).text === 'string' &&
+          typeof (entry as { at?: unknown }).at === 'string'
+      )
+      .slice(0, 6)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Record a broadcast in the announcement history (most recent first, deduped
+ * by text so re-posting the same notice just bumps it to the top, capped 6).
+ */
+export function buildAnnouncementHistory(
+  currentRaw: string | null | undefined,
+  text: string
+): string {
+  const existing = parseAnnouncementHistory(currentRaw).filter((e) => e.text !== text)
+  return JSON.stringify([{ text, at: new Date().toISOString() }, ...existing].slice(0, 6))
+}
+
 export async function buildEventUrl(req: Request): Promise<string> {
   const settings = await getEventSettings()
   return `${getBaseUrl(req)}/?t=${settings.eventToken}`

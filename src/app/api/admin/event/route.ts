@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { getEventSettings } from '@/lib/qr'
+import { buildAnnouncementHistory, getEventSettings, parseAnnouncementHistory } from '@/lib/qr'
 import type { EventStatus, EventStatusResponse } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +26,7 @@ export async function GET(): Promise<NextResponse> {
     announcementExpiresAt: settings.announcementExpiresAt
       ? settings.announcementExpiresAt.toISOString()
       : null,
+    announcementHistory: parseAnnouncementHistory(settings.announcementHistory),
   }
   return NextResponse.json(payload)
 }
@@ -69,6 +70,7 @@ export async function PATCH(req: Request): Promise<NextResponse> {
         const text = String(body.announcement ?? '').trim().slice(0, 200)
         data.announcement = text === '' ? null : text
         if (data.announcement === null) clearsAnnouncement = true
+        else data.announcementHistory = buildAnnouncementHistory(settings.announcementHistory, text)
       }
     }
 
@@ -120,6 +122,7 @@ export async function PATCH(req: Request): Promise<NextResponse> {
       announcementExpiresAt: updated.announcementExpiresAt
         ? updated.announcementExpiresAt.toISOString()
         : null,
+      announcementHistory: parseAnnouncementHistory(updated.announcementHistory),
     }
     return NextResponse.json(payload)
   } catch (err) {
