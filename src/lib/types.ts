@@ -38,6 +38,8 @@ export interface StatsResponse {
     departments: string[];
     studentsByDept: { dept: string; total: number; checkedIn: number }[];
     timeline: { bucket: string; count: number }[];
+    checkedInLastHour: number;
+    busiestWindow: { startsAt: string; count: number } | null;
   };
   recent: {
     id: string;
@@ -133,6 +135,7 @@ export interface QrResponse {
   url: string;
   qrDataUrl: string;
   generatedAt: string;
+  announcement: string | null;
 }
 
 export interface EventStatusResponse {
@@ -140,6 +143,7 @@ export interface EventStatusResponse {
   status: EventStatus;
   eventName: string;
   tagline: string;
+  announcement: string | null;
 }
 
 export interface PublicPulseResponse {
@@ -147,6 +151,7 @@ export interface PublicPulseResponse {
   eventName: string;
   tagline: string;
   status: EventStatus;
+  announcement: string | null;
   checkedIn: number;
   totalRegistered: number;
   recent: { id: string; firstName: string; lastInitial: string; department: string | null; at: string }[];

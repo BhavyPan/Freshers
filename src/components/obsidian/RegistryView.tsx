@@ -193,7 +193,7 @@ export function RegistryView() {
             <form onSubmit={submitQuick} className="mt-3 flex flex-col gap-2 sm:flex-row">
               <Input
                 value={quickId}
-                onChange={(e) => setQuickId(e.target.value)}
+                onChange={(e) => setQuickId(e.target.value.toUpperCase())}
                 placeholder="e.g. OBS26-041"
                 aria-label="Student ID for quick check-in"
                 autoComplete="off"
@@ -330,7 +330,7 @@ export function RegistryView() {
                         key={s.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="border-b border-purple-500/10 transition-colors hover:bg-purple-500/5"
+                        className="obs-row-hover border-b border-purple-500/10"
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">

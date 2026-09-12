@@ -223,7 +223,7 @@ export function ReportsView() {
                 </tr>
               ) : (
                 logs.map((l) => (
-                  <tr key={l.id} className="border-b border-purple-500/8 transition-colors hover:bg-purple-500/5">
+                  <tr key={l.id} className="obs-row-hover border-b border-purple-500/8">
                     <td className="px-5 py-3">
                       <span className="flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-purple-200/60">
                         <Clock className="h-3 w-3 text-purple-300/40" />

@@ -88,3 +88,36 @@ Stage Summary:
 - OBSIDIAN '26 system is feature-complete & stable: 8 spec pages + 6 new features (gate control, sensory feedback, live pulse/ticker, quick check-in, password settings, template+audit exports, PWA).
 - Credentials: admin/obsidian26 (ADMIN), volunteer/volunteer26 (VOLUNTEER).
 - Ready for the recurring webDevReview cron to keep polishing.
+
+---
+Task ID: 4 (cron webDevReview round 2)
+Agent: orchestrator (Z.ai Code)
+Task: QA sweep + data cleanup + live announcement system + dashboard analytics + styling micro-polish
+
+Work Log:
+QA & fixes:
+- Full-flow QA via agent-browser: landing, verify (2K26CSE001 lowercase → GRANTED), result screen, admin pages — all healthy, zero console errors on every route
+- FIXED DATA: previous import-QA had overwritten seeded student OBS26-015 (Dhruv Kulkarni → "Test Duplicate") and left 4 fake rows (Test Ravi/Sneha/Vikram, Riya Duplicate). Restored Dhruv's record; deleted 4 artifacts. Registry now clean at 83 students.
+
+New features:
+- LIVE ANNOUNCEMENT SYSTEM (flagship): EventSettings.announcement column (db:push OK, dev server restarted for fresh Prisma client)
+  - PATCH /api/admin/event now handles status and/or announcement (null clears); GET returns both
+  - /api/public/pulse + /api/qr include announcement
+  - New AnnouncementBanner component (amber themed, megaphone, pulsing live dot, per-text dismissal persisted in localStorage — reappears when text changes) on Landing + Verify (compact)
+  - QRView "Live announcement" editor card: LIVE/OFF badge, 200-char textarea w/ counter, Broadcast/Clear buttons, change-detection disable, volunteer read-only view
+  - Verified round-trip: broadcast via API → pulse carries it → landing banner shows → dismiss works → verify page respects dismissal → edited via UI → live text updated
+- DASHBOARD ANALYTICS: stats API now returns checkedInLastHour (green "+7 / 1H" trend badge on Checked In KPI w/ TrendingUp icon) and busiestWindow (amber "Peak entry window: 9:00 AM — 5 in 15 min" chip w/ Flame icon on fill-rate card)
+
+Styling details:
+- .obs-glow-btn: active press scale(0.97) + brighter ring, focus-visible outline for a11y
+- .obs-row-hover: purple wash + 3px glowing left inset on registry/audit table rows
+- Verify + quick check-in inputs now uppercase the actual value while typing (mirrors server normalization)
+- AnnouncementBanner: gradient amber→purple glass card, dismiss animation via AnimatePresence
+
+Verification:
+- bun run lint PASS · all 6 routes console-error-free · pulse/event/stats APIs return new fields correctly
+
+Stage Summary:
+- System now has 8 major features beyond spec (gate control, feedback sounds, pulse/ticker, quick check-in, settings, exports, PWA, live announcements + analytics)
+- One announcement is intentionally left LIVE for demo; clear it via Event QR Code → Live announcement → Clear
+- Risks: none known. Next round ideas: entry-desk kiosk mode (fullscreen auto-focus verify loop), WhatsApp share card for event QR, student search keyboard nav, CSV round-trip test.

@@ -165,9 +165,18 @@
 
 .obs-glow-btn {
   box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.6), 0 4px 24px rgba(124, 58, 237, 0.45);
+  transition: box-shadow 0.25s ease, transform 0.15s ease, filter 0.25s ease;
 }
 .obs-glow-btn:hover {
   box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.9), 0 6px 38px rgba(168, 85, 247, 0.6);
+}
+.obs-glow-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: 0 0 0 1px rgba(216, 180, 254, 1), 0 2px 18px rgba(168, 85, 247, 0.7);
+}
+.obs-glow-btn:focus-visible {
+  outline: 2px solid rgba(216, 180, 254, 0.8);
+  outline-offset: 2px;
 }
 
 /* film grain overlay */
@@ -284,6 +293,15 @@ body::-webkit-scrollbar-thumb:hover {
   transform: translate(-50%, -50%) rotate(45deg);
   background: #a855f7;
   box-shadow: 0 0 12px rgba(168, 85, 247, 0.9);
+}
+
+/* admin table rows — soft purple wash on hover */
+.obs-row-hover {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.obs-row-hover:hover {
+  background-color: rgba(147, 88, 220, 0.07);
+  box-shadow: inset 3px 0 0 rgba(168, 85, 247, 0.55);
 }
 
 @keyframes obs-ticker-scroll {

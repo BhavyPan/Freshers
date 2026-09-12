@@ -79,6 +79,16 @@ export async function GET(): Promise<NextResponse> {
       timeline.push({ bucket: new Date(bucket).toISOString(), count: bucketCounts.get(bucket) ?? 0 })
     }
 
+    // hourly velocity + peak 15-minute entry window (operational insight)
+    const hourAgo = Date.now() - 60 * 60 * 1000
+    const checkedInLastHour = grantedLogs.filter((l) => l.createdAt.getTime() >= hourAgo).length
+    let busiestWindow: { startsAt: string; count: number } | null = null
+    for (const [bucket, count] of bucketCounts) {
+      if (!busiestWindow || count > busiestWindow.count) {
+        busiestWindow = { startsAt: new Date(bucket).toISOString(), count }
+      }
+    }
+
     const recent = recentRows.map((row) => ({
       id: row.id,
       studentId: row.studentId,
@@ -99,6 +109,8 @@ export async function GET(): Promise<NextResponse> {
         departments,
         studentsByDept,
         timeline,
+        checkedInLastHour,
+        busiestWindow,
       },
       recent,
     } satisfies StatsResponse)

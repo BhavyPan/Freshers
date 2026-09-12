@@ -159,6 +159,12 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
 
+  setAnnouncement: (text: string | null) =>
+    request<EventStatusResponse>("/api/admin/event", {
+      method: "PATCH",
+      body: JSON.stringify({ announcement: text }),
+    }),
+
   quickCheckin: (studentId: string) =>
     request<QuickCheckinResponse>("/api/admin/quick-checkin", {
       method: "POST",

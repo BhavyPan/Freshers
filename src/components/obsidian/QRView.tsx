@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
+  Check,
   Copy,
   Download,
   Eye,
@@ -12,6 +13,7 @@ import {
   FileText,
   Loader2,
   Lock,
+  Megaphone,
   PauseCircle,
   Printer,
   QrCode,
@@ -19,6 +21,7 @@ import {
   RefreshCw,
   ScanLine,
   Shield,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +52,8 @@ export function QRView() {
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [settingStatus, setSettingStatus] = useState<EventStatus | null>(null);
+  const [announcementDraft, setAnnouncementDraft] = useState<string | null>(null);
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["qr"],
@@ -89,6 +94,27 @@ export function QRView() {
       toast({ title: "Could not update gate", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setSettingStatus(null);
+    }
+  }
+
+  async function saveAnnouncement() {
+    if (announcementDraft === null) return;
+    setSavingAnnouncement(true);
+    try {
+      const res = await api.setAnnouncement(announcementDraft.trim() === "" ? null : announcementDraft.trim());
+      setAnnouncementDraft(null);
+      await qc.invalidateQueries({ queryKey: ["qr"] });
+      await qc.invalidateQueries({ queryKey: ["pulse"] });
+      toast({
+        title: res.announcement ? "Announcement live" : "Announcement cleared",
+        description: res.announcement
+          ? "Every public screen shows it within seconds."
+          : "Public screens no longer show a notice.",
+      });
+    } catch (err) {
+      toast({ title: "Could not save announcement", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSavingAnnouncement(false);
     }
   }
 
@@ -215,6 +241,78 @@ export function QRView() {
             })}
           </div>
           {!isAdmin && <p className="mt-3 text-[11px] text-purple-200/40">Gate control is available to admins only.</p>}
+        </motion.div>
+
+        {/* live announcement */}
+        <motion.div initial={{ opacity: 0, y: 14, delay: 0.05 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-2.5 text-sm font-semibold text-purple-100">
+              <Megaphone className="h-4.5 w-4.5 text-amber-300" /> Live announcement
+            </p>
+            {data.announcement ? (
+              <span className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" /> live
+              </span>
+            ) : (
+              <span className="rounded-full border border-purple-500/25 bg-purple-500/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200/50">off</span>
+            )}
+          </div>
+          <p className="mt-3 text-[12px] leading-relaxed text-purple-200/55">
+            Broadcast a one-line notice to every public screen — entry page and verification page. Perfect for
+            “Line moved to Gate B” moments.
+          </p>
+
+          {isAdmin ? (
+            <div className="mt-4 space-y-2.5">
+              <textarea
+                value={announcementDraft ?? data.announcement ?? ""}
+                onChange={(e) => setAnnouncementDraft(e.target.value)}
+                maxLength={200}
+                rows={2}
+                placeholder="e.g. Line for CSE juniors has moved to Gate B — follow the purple flags."
+                aria-label="Announcement text"
+                className="w-full resize-none rounded-xl border border-purple-500/30 bg-[#0b0517]/90 px-4 py-3 text-sm leading-relaxed text-purple-50 placeholder:text-purple-200/25 focus:border-amber-300/60 focus:ring-2 focus:ring-amber-400/20"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] tabular-nums text-purple-200/40">
+                  {(announcementDraft ?? data.announcement ?? "").length}/200
+                </p>
+                <div className="flex gap-2">
+                  {(data.announcement || (announcementDraft !== null && announcementDraft.trim() !== "")) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={savingAnnouncement || (announcementDraft ?? data.announcement ?? "").trim() === ""}
+                      onClick={() => setAnnouncementDraft("")}
+                      className="border-purple-500/30 text-xs text-purple-200/70"
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Clear
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={
+                      savingAnnouncement ||
+                      announcementDraft === null ||
+                      announcementDraft.trim() === (data.announcement ?? "").trim()
+                    }
+                    onClick={saveAnnouncement}
+                    className="obs-glow-btn bg-gradient-to-r from-violet-700 via-purple-500 to-violet-700 text-xs text-white"
+                  >
+                    {savingAnnouncement ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                    Broadcast
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : data.announcement ? (
+            <p className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
+              “{data.announcement}”
+            </p>
+          ) : (
+            <p className="mt-3 text-[11px] text-purple-200/40">No notice is live. Only admins can broadcast.</p>
+          )}
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 14, delay: 0.08 }} animate={{ opacity: 1, y: 0 }} className="obs-card rounded-2xl p-6">

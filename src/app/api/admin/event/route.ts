@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 const VALID: EventStatus[] = ['OPEN', 'PAUSED', 'CLOSED']
 
-/** GET current gate status (any signed-in admin/volunteer). */
+/** GET current gate status + announcement (any signed-in admin/volunteer). */
 export async function GET(): Promise<NextResponse> {
   const guard = await requireAdmin()
   if (!guard.ok) {
@@ -22,32 +22,55 @@ export async function GET(): Promise<NextResponse> {
     status,
     eventName: settings.eventName,
     tagline: settings.tagline,
+    announcement: settings.announcement ?? null,
   }
   return NextResponse.json(payload)
 }
 
-/** PATCH the gate status — admins only. */
+/** PATCH the gate status and/or live announcement — admins only. */
 export async function PATCH(req: Request): Promise<NextResponse> {
   const guard = await requireAdmin(['ADMIN'])
   if (!guard.ok) {
     return NextResponse.json({ ok: false, message: guard.message }, { status: guard.status })
   }
   try {
-    const body = (await req.json()) as { status?: unknown }
-    const requested = String(body?.status ?? '').toUpperCase() as EventStatus
-    if (!VALID.includes(requested)) {
-      return NextResponse.json(
-        { ok: false, message: 'Status must be OPEN, PAUSED or CLOSED.' },
-        { status: 400 }
-      )
-    }
+    const body = (await req.json()) as { status?: unknown; announcement?: unknown }
     const settings = await getEventSettings()
-    await db.eventSettings.update({ where: { id: settings.id }, data: { status: requested } })
+    const data: { status?: string; announcement?: string | null } = {}
+
+    if (body?.status !== undefined) {
+      const requested = String(body.status ?? '').toUpperCase() as EventStatus
+      if (!VALID.includes(requested)) {
+        return NextResponse.json(
+          { ok: false, message: 'Status must be OPEN, PAUSED or CLOSED.' },
+          { status: 400 }
+        )
+      }
+      data.status = requested
+    }
+
+    if (body?.announcement !== undefined) {
+      if (body.announcement === null) {
+        data.announcement = null
+      } else {
+        const text = String(body.announcement ?? '').trim().slice(0, 200)
+        data.announcement = text === '' ? null : text
+      }
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ ok: false, message: 'Nothing to update.' }, { status: 400 })
+    }
+
+    const updated = await db.eventSettings.update({ where: { id: settings.id }, data })
+    const status: EventStatus =
+      updated.status === 'PAUSED' ? 'PAUSED' : updated.status === 'CLOSED' ? 'CLOSED' : 'OPEN'
     const payload: EventStatusResponse = {
       ok: true,
-      status: requested,
-      eventName: settings.eventName,
-      tagline: settings.tagline,
+      status,
+      eventName: updated.eventName,
+      tagline: updated.tagline,
+      announcement: updated.announcement ?? null,
     }
     return NextResponse.json(payload)
   } catch (err) {

@@ -33,6 +33,7 @@ export async function GET(): Promise<NextResponse> {
       eventName: settings.eventName,
       tagline: settings.tagline,
       status,
+      announcement: settings.announcement?.trim() ? settings.announcement.trim().slice(0, 200) : null,
       checkedIn,
       totalRegistered,
       recent: recent.map((s) => {

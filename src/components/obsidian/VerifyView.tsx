@@ -12,6 +12,7 @@ import { readEventToken, useObsidianStore } from "@/lib/client-store";
 import type { VerifyResponse } from "@/lib/types";
 import { ScanningOverlay } from "./ScanningOverlay";
 import { ObsidianLogo } from "./ObsidianLogo";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39}$/;
 
@@ -96,6 +97,9 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
       </header>
 
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 py-10">
+        {/* live organizer announcement (compact) */}
+        {pulse?.announcement && <AnnouncementBanner text={pulse.announcement} compact />}
+
         {/* step tracker */}
         <div className="mb-8 flex items-center justify-center gap-0 text-[10px] font-semibold uppercase tracking-[0.18em]">
           {[
@@ -160,7 +164,8 @@ export function VerifyView({ onResult, onBack }: { onResult: () => void; onBack:
                 id="student-id"
                 value={value}
                 onChange={(e) => {
-                  setValue(e.target.value);
+                  // mirror the server-side normalization while typing
+                  setValue(e.target.value.toUpperCase());
                   if (error) setError(null);
                 }}
                 placeholder="e.g. OBS26-041"

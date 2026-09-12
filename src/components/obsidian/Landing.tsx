@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { ObsidianLogo } from "./ObsidianLogo";
 import { CrystalFallback } from "./CrystalFallback";
 import { EventStatusBadge } from "./EventStatusBadge";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 import { use3DSupport } from "./use-3d-support";
 
 const CrystalScene = lazy(() => import("./CrystalScene"));
@@ -44,6 +45,9 @@ export function Landing({ onBegin }: { onBegin: () => void }) {
 
   return (
     <div className="relative flex min-h-svh flex-col overflow-hidden">
+      {/* live organizer announcement */}
+      {pulse?.announcement && <AnnouncementBanner text={pulse.announcement} />}
+
       {/* 3D crystal centerpiece */}
       <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
         <div className="relative h-[78vh] max-h-[720px] w-full opacity-90 sm:h-[86vh]">

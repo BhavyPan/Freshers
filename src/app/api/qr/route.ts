@@ -21,6 +21,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       url,
       qrDataUrl: dataUrl,
       generatedAt: new Date().toISOString(),
+      announcement: settings.announcement ?? null,
     } satisfies QrResponse)
   } catch {
     return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })

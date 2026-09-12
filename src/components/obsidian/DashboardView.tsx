@@ -5,10 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   BadgeCheck,
+  Flame,
   Hourglass,
   Layers,
   Radar,
   ShieldAlert,
+  TrendingUp,
   UserCheck,
 } from "lucide-react";
 import {
@@ -42,12 +44,14 @@ function KpiCard({
   value,
   accent,
   delay,
+  trend,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number | string;
   accent: "purple" | "green" | "amber" | "red";
   delay: number;
+  trend?: { text: string; tone: "up" | "flat" } | null;
 }) {
   const accents = {
     purple: "border-purple-400/40 text-purple-200 from-purple-600/25 bg-purple-500/10",
@@ -68,6 +72,20 @@ function KpiCard({
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg border bg-current/10", accents.split(" ")[0])}>
           <Icon className="h-4.5 w-4.5" />
         </span>
+        {trend && (
+          <span
+            className={cn(
+              "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]",
+              trend.tone === "up"
+                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"
+                : "border-purple-500/25 bg-purple-500/8 text-purple-200/60"
+            )}
+            title="Entries in the last 60 minutes"
+          >
+            <TrendingUp className={cn("h-3 w-3", trend.tone === "flat" && "opacity-50")} />
+            {trend.text}
+          </span>
+        )}
       </div>
       <p className="font-display mt-4 text-3xl font-black tabular-nums text-purple-50">{value}</p>
       <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-200/60">{label}</p>
@@ -116,7 +134,14 @@ export function DashboardView() {
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <KpiCard icon={Layers} label="Total Registered" value={stats.totalRegistered} accent="purple" delay={0} />
-        <KpiCard icon={BadgeCheck} label="Checked In" value={stats.checkedIn} accent="green" delay={0.08} />
+        <KpiCard
+          icon={BadgeCheck}
+          label="Checked In"
+          value={stats.checkedIn}
+          accent="green"
+          delay={0.08}
+          trend={{ text: `+${stats.checkedInLastHour} / 1h`, tone: stats.checkedInLastHour > 0 ? "up" : "flat" }}
+        />
         <KpiCard icon={Hourglass} label="Not Arrived" value={stats.notArrived} accent="amber" delay={0.16} />
         <KpiCard icon={ShieldAlert} label="Denied / Invalid" value={stats.deniedAttempts} accent="red" delay={0.24} />
       </div>
@@ -152,6 +177,15 @@ export function DashboardView() {
           {stats.checkedIn} in · {stats.notArrived} pending
           {stats.lastCheckinAt && <> · last check-in {timeAgo(stats.lastCheckinAt)}</>}
         </p>
+        {stats.busiestWindow && stats.busiestWindow.count > 0 && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-purple-500/20 bg-purple-500/8 px-3 py-2">
+            <Flame className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+            <p className="text-[11px] text-purple-200/70">
+              Peak entry window: <span className="font-semibold text-purple-100">{format(new Date(stats.busiestWindow.startsAt), "h:mm a")}</span>
+              {" "}— <span className="font-semibold tabular-nums text-amber-200">{stats.busiestWindow.count}</span> in 15 min
+            </p>
+          </div>
+        )}
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-5">

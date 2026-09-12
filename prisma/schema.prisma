@@ -65,10 +65,11 @@ model AuditLog {
 
 // Event settings + QR token (single row)
 model EventSettings {
-  id          String   @id @default(cuid())
-  eventToken  String   @unique @default(cuid()) // rotating token embedded in QR URL
-  eventName   String   @default("OBSIDIAN '26")
-  tagline     String   @default("Unfold the Unknown")
-  status      String   @default("OPEN") // OPEN | PAUSED | CLOSED — entry gate control
-  updatedAt   DateTime @updatedAt
+  id           String    @id @default(cuid())
+  eventToken   String    @unique @default(cuid()) // rotating token embedded in QR URL
+  eventName    String    @default("OBSIDIAN '26")
+  tagline      String    @default("Unfold the Unknown")
+  status       String    @default("OPEN") // OPEN | PAUSED | CLOSED — entry gate control
+  announcement String? // one-line live notice broadcast to all public screens
+  updatedAt    DateTime  @updatedAt
 }
